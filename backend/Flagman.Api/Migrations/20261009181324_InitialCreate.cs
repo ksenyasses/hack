@@ -18,6 +18,7 @@ namespace Flagman.Api.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Number = table.Column<string>(type: "text", nullable: false),
                     CreatedByUserId = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Comment = table.Column<string>(type: "text", nullable: true)
@@ -40,6 +41,35 @@ namespace Flagman.Api.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Dishes", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OrderItems",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    OrderId = table.Column<int>(type: "integer", nullable: false),
+                    DishId = table.Column<int>(type: "integer", nullable: false),
+                    Quantity = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OrderItems", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Orders",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    CreatedByUserId = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Orders", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -68,6 +98,7 @@ namespace Flagman.Api.Migrations
                     Name = table.Column<string>(type: "text", nullable: false),
                     Unit = table.Column<string>(type: "text", nullable: false),
                     MinStock = table.Column<decimal>(type: "numeric(12,3)", nullable: false),
+                    ShelfLifeDays = table.Column<int>(type: "integer", nullable: false),
                     IsArchived = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -92,22 +123,6 @@ namespace Flagman.Api.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Sales",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    DishId = table.Column<int>(type: "integer", nullable: false),
-                    Quantity = table.Column<int>(type: "integer", nullable: false),
-                    SoldByUserId = table.Column<int>(type: "integer", nullable: false),
-                    SoldAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Sales", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "StockMovements",
                 columns: table => new
                 {
@@ -118,7 +133,7 @@ namespace Flagman.Api.Migrations
                     QuantityDelta = table.Column<decimal>(type: "numeric(12,3)", nullable: false),
                     Type = table.Column<int>(type: "integer", nullable: false),
                     Reason = table.Column<int>(type: "integer", nullable: true),
-                    SaleId = table.Column<int>(type: "integer", nullable: true),
+                    OrderId = table.Column<int>(type: "integer", nullable: true),
                     UserId = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -156,6 +171,12 @@ namespace Flagman.Api.Migrations
                 name: "Dishes");
 
             migrationBuilder.DropTable(
+                name: "OrderItems");
+
+            migrationBuilder.DropTable(
+                name: "Orders");
+
+            migrationBuilder.DropTable(
                 name: "ProductBatches");
 
             migrationBuilder.DropTable(
@@ -163,9 +184,6 @@ namespace Flagman.Api.Migrations
 
             migrationBuilder.DropTable(
                 name: "RecipeItems");
-
-            migrationBuilder.DropTable(
-                name: "Sales");
 
             migrationBuilder.DropTable(
                 name: "StockMovements");

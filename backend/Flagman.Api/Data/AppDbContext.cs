@@ -13,7 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<Dish> Dishes => Set<Dish>();
     public DbSet<RecipeItem> RecipeItems => Set<RecipeItem>();
-    public DbSet<Sale> Sales => Set<Sale>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -39,6 +39,10 @@ namespace Flagman.Api.Migrations
                     b.Property<int>("CreatedByUserId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.ToTable("Deliveries");
@@ -67,6 +71,47 @@ namespace Flagman.Api.Migrations
                     b.ToTable("Dishes");
                 });
 
+            modelBuilder.Entity("Flagman.Api.Models.Order", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Orders");
+                });
+
+            modelBuilder.Entity("Flagman.Api.Models.OrderItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DishId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OrderItems");
+                });
+
             modelBuilder.Entity("Flagman.Api.Models.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -87,6 +132,9 @@ namespace Flagman.Api.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("ShelfLifeDays")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Unit")
                         .IsRequired()
@@ -147,31 +195,6 @@ namespace Flagman.Api.Migrations
                     b.ToTable("RecipeItems");
                 });
 
-            modelBuilder.Entity("Flagman.Api.Models.Sale", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DishId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("SoldAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("SoldByUserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Sales");
-                });
-
             modelBuilder.Entity("Flagman.Api.Models.StockMovement", b =>
                 {
                     b.Property<int>("Id")
@@ -186,6 +209,9 @@ namespace Flagman.Api.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("OrderId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("integer");
 
@@ -193,9 +219,6 @@ namespace Flagman.Api.Migrations
                         .HasColumnType("numeric(12,3)");
 
                     b.Property<int?>("Reason")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SaleId")
                         .HasColumnType("integer");
 
                     b.Property<int>("Type")
