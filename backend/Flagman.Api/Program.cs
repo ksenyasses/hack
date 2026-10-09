@@ -11,6 +11,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
+// ===== ДОБАВЛЕНО: разрешаем фронту обращаться к серверу =====
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
+// ===== конец добавленного =====
+
 // Проверка пропусков (JWT)
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -48,6 +58,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseSwagger();
 app.UseSwaggerUI();
+
+// ===== ДОБАВЛЕНО: применяем разрешение CORS =====
+app.UseCors();
+// ===== конец добавленного =====
 
 // Сначала проверь пропуск, потом права, потом пускай к адресам
 app.UseAuthentication();
