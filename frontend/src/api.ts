@@ -109,6 +109,16 @@ export type DishData = {
   recipe: { productId: number; quantityPerPortion: number }[];
 };
 
+// Одна позиция заказа: блюдо и сколько порций
+export type OrderItemInput = { dishId: number; quantity: number };
+
+// Результат оформленного заказа
+export type OrderResult = {
+  id: number;
+  createdAt: string;
+  items: OrderItemInput[];
+};
+
 // Дата через N дней от сегодня в формате YYYY-MM-DD (для заглушки)
 function inDays(days: number): string {
   const d = new Date();
@@ -436,6 +446,78 @@ export async function updateDish(id: number, data: DishData): Promise<Dish> {
     return updated;
   }
   const res = await api.put<Dish>(`/dishes/${id}`, data);
+  return res.data;
+}
+
+// --- Заказы (оформление продажи) ---
+
+// Номер следующего заказа
+let mockOrderId = 1;
+
+// Оформить заказ: проверяет остатки и списывает продукты со склада
+export async function createOrder(items: OrderItemInput[]): Promise<OrderResult> {
+  if (USE_MOCK) {
+    if (items.length === 0) {
+      throw new Error("Заказ пустой");
+    }
+
+    // Считаем, сколько каждого продукта нужно на все порции.
+    // Одно блюдо может встретиться несколько раз — складываем потребность.
+    const need = new Map<number, number>();
+    for (const item of items) {
+      const dish = mockDishes.find((d) => d.id === item.dishId);
+      if (!dish) {
+        throw new Error("Блюдо не найдено — обновите страницу");
+      }
+      if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
+        throw new Error("Количество порций должно быть больше нуля");
+      }
+      for (const r of dish.recipe) {
+        const required = r.quantityPerPortion * item.quantity;
+        need.set(r.productId, (need.get(r.productId) ?? 0) + required);
+      }
+    }
+
+    // Сравниваем с остатком: чего-то не хватает — отказ текстом, как сервер
+    for (const [productId, required] of need) {
+      const stock = mockStockData.find((s) => s.id === productId);
+      const available = stock ? stock.quantity : 0;
+      const unit = stock ? stock.unit : "";
+      if (required > available) {
+        const name = stock ? stock.name.toLowerCase() : "продукт";
+        throw new Error(
+          `Недостаточно ${name}: нужно ${required.toFixed(2)} ${unit}, ` +
+            `доступно ${available.toFixed(2)} ${unit}`
+        );
+      }
+    }
+
+    // Всё есть — списываем со склада (округляем, чтобы не плыли дроби)
+    for (const [productId, required] of need) {
+      const stock = mockStockData.find((s) => s.id === productId);
+      if (stock) {
+        stock.quantity = Math.round((stock.quantity - required) * 100) / 100;
+        if (stock.quantity <= 0) {
+          stock.quantity = 0;
+          stock.status = "Закончился";
+          stock.nearestExpiry = null;
+          stock.daysLeft = null;
+        }
+        // Если стало меньше минимума — подсвечиваем красным в «Складе»
+        stock.belowMinStock = stock.quantity < stock.minStock;
+      }
+    }
+
+    return { id: mockOrderId++, createdAt: new Date().toISOString(), items };
+  }
+  const res = await api.post<OrderResult>("/orders", { items });
+  return res.data;
+}
+
+// Список заказов (заготовка для будущего раздела «Мои продажи»)
+export async function getOrders(): Promise<OrderResult[]> {
+  if (USE_MOCK) return [];
+  const res = await api.get<OrderResult[]>("/orders");
   return res.data;
 }
 
