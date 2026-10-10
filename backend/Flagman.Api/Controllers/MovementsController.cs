@@ -1,7 +1,8 @@
 using Flagman.Api.Data;
+using Flagman.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
@@ -13,14 +14,50 @@ public class MovementsController : ControllerBase
 
     public MovementsController(AppDbContext db) => _db = db;
 
-    // GET /api/movements?limit=100 — журнал операций, свежие сверху
+    // GET /api/movements?limit=100&type=WriteOff&productId=1&from=2026-10-01&to=2026-10-10
+    // Журнал операций, свежие сверху. Все фильтры необязательные
     [HttpGet("api/movements")]
-    public async Task<ActionResult> Get([FromQuery] int limit = 100)
+    public async Task<ActionResult> Get(
+        [FromQuery] int limit = 100,
+        [FromQuery] string? type = null,
+        [FromQuery] int? productId = null,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null)
     {
         if (limit <= 0 || limit > 500)
             limit = 100;
 
-        var rows = await _db.StockMovements
+        var query = _db.StockMovements.AsQueryable();
+
+        // Фильтр по типу операции: Receipt, Order, WriteOff
+        if (!string.IsNullOrWhiteSpace(type) && Enum.TryParse<MovementType>(type, true, out var parsedType))
+            query = query.Where(m => m.Type == parsedType);
+
+        // Фильтр по продукту
+        if (productId.HasValue)
+            query = query.Where(m => m.ProductId == productId.Value);
+
+        // Фильтр по датам.
+        // Дату из фильтра считаем в местном времени сервера и переводим в UTC:
+        // PostgreSQL принимает только время, помеченное как UTC
+        if (from.HasValue)
+        {
+            var fromDate = DateTime.SpecifyKind(
+                from.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local).ToUniversalTime();
+
+            query = query.Where(m => m.CreatedAt >= fromDate);
+        }
+
+        if (to.HasValue)
+        {
+            // Конец дня — это следующий день, 00:00, иначе записи за сам день не попадут
+            var toDate = DateTime.SpecifyKind(
+                to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Local).ToUniversalTime();
+
+            query = query.Where(m => m.CreatedAt < toDate);
+        }
+
+        var rows = await query
             .OrderByDescending(m => m.Id)
             .Take(limit)
             .Select(m => new
@@ -41,7 +78,7 @@ public class MovementsController : ControllerBase
             })
             .ToListAsync();
 
-        // Enum-ы превращаем в текст уже в памяти: в запрос к базе такое не переводится
+        // Enum-ы превращаем в текст уже в памяти
         var items = rows.Select(m => new
         {
             m.Id,
