@@ -1,6 +1,7 @@
 import { useState } from "react";
 import LoginPage from "./LoginPage";
 import Layout, { MENU_BY_ROLE } from "./Layout";
+import DashboardPage from "./DashboardPage";
 import ProductsPage from "./ProductsPage";
 import StockPage from "./StockPage";
 import DeliveryPage from "./DeliveryPage";
@@ -37,6 +38,7 @@ function App() {
 
   // Какой раздел рисуем в рабочей области
   const renderSection = () => {
+    if (section === "Дашборд") return <DashboardPage />;
     if (section === "Продукты") return <ProductsPage />;
     if (section === "Склад") return <StockPage />;
     if (section === "Приёмка") return <DeliveryPage />;

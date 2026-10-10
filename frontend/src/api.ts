@@ -119,6 +119,69 @@ export type OrderResult = {
   items: OrderItemInput[];
 };
 
+// Четыре счётчика на дашборде
+export type KpiCounters = {
+  products: number;
+  expired: number;
+  dishesInStopList: number;
+  expiringSoon: number;
+};
+
+// Позиция, у которой скоро истекает срок
+export type ExpiringItem = {
+  productName: string;
+  unit: string;
+  quantity: number;
+  expiryDate: string;
+  daysLeft: number;
+  deliveryNumber?: string;
+};
+
+// Позиция, у которой срок уже вышел (у бэкенда для неё поле daysOverdue)
+export type ExpiredItem = {
+  productName: string;
+  unit: string;
+  quantity: number;
+  expiryDate: string;
+  daysOverdue: number;
+  deliveryNumber?: string;
+};
+
+// Позиция, которая заканчивается (ниже минимума)
+export type LowStockItem = {
+  name: string;
+  unit: string;
+  quantity: number;
+  minStock: number;
+  toOrder: number;
+};
+
+// Блюдо в стоп-листе
+export type StopItem = {
+  id: number;
+  name: string;
+  reason: string;
+};
+
+// Всё, что нужно дашборду, одним куском
+export type DashboardData = {
+  generatedAt: string;
+  counters: KpiCounters;
+  expiringSoon: ExpiringItem[];
+  expired: ExpiredItem[];
+  runningLow: LowStockItem[];
+  stopList: StopItem[];
+};
+
+// Горячее предложение — блюдо, которое надо продать сегодня
+export type HotOffer = {
+  id: number;
+  name: string;
+  priority: number;
+  coverPortions: number;
+  reason: string;
+};
+
 // Дата через N дней от сегодня в формате YYYY-MM-DD (для заглушки)
 function inDays(days: number): string {
   const d = new Date();
@@ -521,15 +584,55 @@ export async function getOrders(): Promise<OrderResult[]> {
   return res.data;
 }
 
+// --- Дашборд и горячие предложения ---
+
+// Данные-заглушки дашборда (счётчики и три карточки)
+const mockDashboard: DashboardData = {
+  generatedAt: "2026-10-09T14:35:00Z",
+  counters: { products: 18, expired: 1, dishesInStopList: 3, expiringSoon: 4 },
+  expiringSoon: [
+    { productName: "Сливки", unit: "л", quantity: 1.8, expiryDate: "2026-10-10", daysLeft: 1, deliveryNumber: "П-1001" },
+    { productName: "Курица", unit: "кг", quantity: 2.25, expiryDate: "2026-10-12", daysLeft: 2, deliveryNumber: "П-1002" },
+    { productName: "Сыр", unit: "кг", quantity: 2.25, expiryDate: "2026-10-13", daysLeft: 3, deliveryNumber: "П-1003" },
+    { productName: "Картофель", unit: "кг", quantity: 0.8, expiryDate: "2026-10-14", daysLeft: 4, deliveryNumber: "П-1004" },
+  ],
+  expired: [
+    { productName: "Масло", unit: "л", quantity: 0.3, expiryDate: "2026-10-08", daysOverdue: 1, deliveryNumber: "П-0990" },
+  ],
+  runningLow: [
+    { name: "Курица", unit: "кг", quantity: 2.25, minStock: 3, toOrder: 0.75 },
+    { name: "Сыр", unit: "кг", quantity: 0.8, minStock: 1, toOrder: 0.2 },
+  ],
+  stopList: [
+    { id: 1, name: "Цезарь", reason: "не хватает: Курица" },
+    { id: 2, name: "Карбонара", reason: "не хватает: Сливки" },
+  ],
+};
+
+// Заглушки горячих предложений, отсортированные по приоритету
+const mockOffers: HotOffer[] = [
+  { id: 1, name: "Карбонара", priority: 22.5, coverPortions: 9, reason: "Сливки: срок 1 дн., остаток 1.80 л — хватит на 9 порций" },
+  { id: 2, name: "Цезарь", priority: 11.3, coverPortions: 11, reason: "Курица: срок 2 дн., остаток 2.25 кг — хватит на 11 порций" },
+  { id: 3, name: "Куриный суп", priority: 7.5, coverPortions: 22, reason: "Курица: срок 2 дн., остаток 2.25 кг — хватит на 22 порций" },
+];
+
+// Данные для дашборда одним запросом
+export async function getDashboard(): Promise<DashboardData> {
+  if (USE_MOCK) return mockDashboard;
+  const res = await api.get<DashboardData>("/dashboard");
+  return res.data;
+}
+
+// Горячие предложения (сервер возвращает объект { offers: [...] })
+export async function getHotOffers(): Promise<{ offers: HotOffer[] }> {
+  if (USE_MOCK) return { offers: mockOffers };
+  const res = await api.get<{ offers: HotOffer[] }>("/hot-offers");
+  return res.data;
+}
+
 // --- Заготовки для будущих разделов ---
 export async function getStopList() {
   if (USE_MOCK) return [];
   const res = await api.get("/stop-list");
-  return res.data;
-}
-
-export async function getHotOffers() {
-  if (USE_MOCK) return [];
-  const res = await api.get("/hot-offers");
   return res.data;
 }
