@@ -1,9 +1,9 @@
 using Flagman.Api.Data;
 using Flagman.Api.Models;
 using Flagman.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
@@ -18,6 +18,7 @@ public class DishesController : ControllerBase
 
     public record RecipeItemRequest(int ProductId, decimal QuantityPerPortion);
     public record DishRequest(string Name, List<RecipeItemRequest> Recipe);
+    public record ManualStopRequest(bool Stopped);
 
     // GET /api/dishes — блюда с рецептом и доступностью
     [HttpGet]
@@ -48,6 +49,7 @@ public class DishesController : ControllerBase
                 recipe,
                 availablePortions = portions,
                 inStopList = portions <= 0,
+                manuallyStopped = dish.IsManuallyStopped,
                 reason
             });
         }
@@ -122,6 +124,27 @@ public class DishesController : ControllerBase
         await _db.SaveChangesAsync();
 
         return Ok(new { dish.Id, dish.Name });
+    }
+
+    // PUT /api/dishes/{id}/manual-stop — скрыть блюдо вручную или вернуть в продажу
+    [HttpPut("{id}/manual-stop")]
+    [Authorize(Roles = "Manager,Cook")]
+    public async Task<ActionResult> SetManualStop(int id, ManualStopRequest request)
+    {
+        var dish = await _db.Dishes.FindAsync(id);
+        if (dish is null)
+            return NotFound(new { error = "Блюдо не найдено" });
+
+        dish.IsManuallyStopped = request.Stopped;
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            dish.Id,
+            dish.Name,
+            manuallyStopped = dish.IsManuallyStopped,
+            message = dish.IsManuallyStopped ? "Блюдо скрыто вручную" : "Блюдо снова в продаже"
+        });
     }
 
     // Проверяем, что все продукты из рецепта существуют и нормы положительные

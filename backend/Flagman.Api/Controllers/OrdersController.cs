@@ -42,6 +42,8 @@ public class OrdersController : ControllerBase
             var dish = await _db.Dishes.FindAsync(item.DishId);
             if (dish is null)
                 return BadRequest(new { error = $"Блюдо с id {item.DishId} не найдено" });
+            if (dish.IsManuallyStopped)
+                return BadRequest(new { error = $"Блюдо «{dish.Name}» снято с продажи вручную" });
 
             var recipe = await _db.RecipeItems
                 .Where(r => r.DishId == dish.Id)
