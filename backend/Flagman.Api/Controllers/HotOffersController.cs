@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flagman.Api.Data;
 using Flagman.Api.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -14,7 +15,18 @@ public class HotOffersController : ControllerBase
 
     public HotOffersController(AppDbContext db) => _db = db;
 
-    private record Offer(int Id, string Name, double Priority, int CoverPortions, string? Reason);
+    private record Offer(int Id, string Name, double Priority, int CoverPortions, string? Reason, bool IsPromo);
+
+    // Русская форма слова «порция» для числа: 1 порция, 2 порции, 5 порций
+    private static string PortionsWord(int n)
+    {
+        var n100 = n % 100;
+        if (n100 >= 11 && n100 <= 14) return "порций";
+        var n10 = n % 10;
+        if (n10 == 1) return "порция";
+        if (n10 >= 2 && n10 <= 4) return "порции";
+        return "порций";
+    }
 
     // GET /api/hot-offers — что продавать в первую очередь и почему
     [HttpGet("api/hot-offers")]
@@ -29,8 +41,10 @@ public class HotOffersController : ControllerBase
             .Select(b => new { b.ProductId, b.Quantity, b.ExpiryDate })
             .ToListAsync();
 
-        // 2. Группируем по продукту
+        // 2. Группируем по продукту ТОЛЬКО не просроченные партии:
+        //    просроченное нельзя предлагать продавать — его списываем (см. toWriteOff ниже)
         var hotByProduct = hot
+            .Where(b => b.ExpiryDate >= today)
             .GroupBy(b => b.ProductId)
             .ToDictionary(
                 g => g.Key,
@@ -98,15 +112,20 @@ public class HotOffersController : ControllerBase
                     var name = productInfo.GetValueOrDefault(item.ProductId)?.Name ?? "продукт";
                     var unit = productInfo.GetValueOrDefault(item.ProductId)?.Unit ?? "";
 
+                    // Число всегда с точкой, независимо от локали сервера
+                    var q = h.Quantity.ToString("0.00", CultureInfo.InvariantCulture);
+                    var portions = PortionsWord(cover);
+
                     reason = daysLeft == 0
-                        ? $"{name}: срок истекает сегодня, остаток {h.Quantity:0.00} {unit} — хватит на {cover} порций"
-                        : $"{name}: срок {daysLeft} дн., остаток {h.Quantity:0.00} {unit} — хватит на {cover} порций";
+                        ? $"{name}: срок истекает сегодня, остаток {q} {unit} — хватит на {cover} {portions}"
+                        : $"{name}: срок {daysLeft} дн., остаток {q} {unit} — хватит на {cover} {portions}";
                 }
             }
 
             if (score <= 0) continue;
 
-            offers.Add(new Offer(dish.Id, dish.Name, Math.Round(score, 1), coverPortions, reason));
+            var isPromo = dish.PromoUntil != null && dish.PromoUntil >= today;
+            offers.Add(new Offer(dish.Id, dish.Name, Math.Round(score, 1), coverPortions, reason, isPromo));
         }
 
         return Ok(new

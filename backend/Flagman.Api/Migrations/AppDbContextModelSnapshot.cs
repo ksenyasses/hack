@@ -66,6 +66,9 @@ namespace Flagman.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("PromoUntil")
+                        .HasColumnType("date");
+
                     b.HasKey("Id");
 
                     b.ToTable("Dishes");

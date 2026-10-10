@@ -19,11 +19,13 @@ public class DishesController : ControllerBase
     public record RecipeItemRequest(int ProductId, decimal QuantityPerPortion);
     public record DishRequest(string Name, List<RecipeItemRequest> Recipe);
     public record ManualStopRequest(bool Stopped);
+    public record PromoRequest(DateOnly? Until);
 
     // GET /api/dishes — блюда с рецептом и доступностью
     [HttpGet]
     public async Task<ActionResult> GetAll()
     {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var dishes = await _db.Dishes.OrderBy(d => d.Name).ToListAsync();
         var result = new List<object>();
 
@@ -50,6 +52,8 @@ public class DishesController : ControllerBase
                 availablePortions = portions,
                 inStopList = portions <= 0,
                 manuallyStopped = dish.IsManuallyStopped,
+                promoUntil = dish.PromoUntil,
+                isPromo = dish.PromoUntil != null && dish.PromoUntil >= today,
                 reason
             });
         }
@@ -145,6 +149,22 @@ public class DishesController : ControllerBase
             manuallyStopped = dish.IsManuallyStopped,
             message = dish.IsManuallyStopped ? "Блюдо скрыто вручную" : "Блюдо снова в продаже"
         });
+    }
+
+    // PUT /api/dishes/{id}/promo — включить/выключить «Блюдо дня»
+    // until = дата (обычно сегодня) — включить; until = null — отключить
+    [HttpPut("{id}/promo")]
+    [Authorize(Roles = "Manager")]
+    public async Task<ActionResult> SetPromo(int id, PromoRequest request)
+    {
+        var dish = await _db.Dishes.FindAsync(id);
+        if (dish is null)
+            return NotFound(new { error = "Блюдо не найдено" });
+
+        dish.PromoUntil = request.Until;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { dish.Id, dish.Name, promoUntil = dish.PromoUntil });
     }
 
     // Проверяем, что все продукты из рецепта существуют и нормы положительные

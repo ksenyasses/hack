@@ -78,6 +78,7 @@ public class Dish
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public bool IsManuallyStopped { get; set; }
+    public DateOnly? PromoUntil { get; set; }     // до какого дня блюдо в акции («Блюдо дня»); null — не в акции
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
