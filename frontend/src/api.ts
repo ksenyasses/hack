@@ -93,13 +93,18 @@ export type RecipeItem = {
   quantityPerPortion: number;
 };
 
-// Блюдо с рецептом и доступностью
+// Блюдо с рецептом и доступностью.
+// Рецепт — тот же набор полей, что и в задании бэкендера
+// ({ productId, productName, quantityPerPortion }), просто собран в тип RecipeItem.
 export type Dish = {
   id: number;
   name: string;
   recipe: RecipeItem[];
   availablePortions: number;
   inStopList: boolean;
+  manuallyStopped: boolean;
+  promoUntil: string | null; // "2026-10-10" или null
+  isPromo: boolean;
   reason: string | null;
 };
 
@@ -180,6 +185,8 @@ export type HotOffer = {
   priority: number;
   coverPortions: number;
   reason: string;
+  // Включена ли акция «Блюдо дня»
+  isPromo: boolean;
 };
 
 // Дата через N дней от сегодня в формате YYYY-MM-DD (для заглушки)
@@ -400,35 +407,33 @@ function portionsFromStock(recipe: { productId: number; quantityPerPortion: numb
   return min === Infinity ? 0 : min;
 }
 
-// Моковые блюда
+// Моковые блюда — данные из задания на «Меню» официанта
 let mockDishes: Dish[] = [
   {
-    id: 1,
-    name: "Цезарь",
-    recipe: [
-      { productId: 1, productName: "Курица", quantityPerPortion: 0.2 },
-      { productId: 2, productName: "Помидор", quantityPerPortion: 0.1 },
-    ],
-    availablePortions: 12,
-    inStopList: false,
-    reason: null,
+    id: 1, name: "Карбонара",
+    recipe: [{ productId: 3, productName: "Сливки", quantityPerPortion: 0.15 }],
+    availablePortions: 12, inStopList: false, manuallyStopped: false,
+    promoUntil: "2026-10-10", isPromo: true, reason: null,
   },
   {
-    id: 2,
-    name: "Куриный суп",
-    recipe: [
-      { productId: 1, productName: "Курица", quantityPerPortion: 0.1 },
-    ],
-    availablePortions: 25,
-    inStopList: false,
-    reason: null,
+    id: 2, name: "Том-ям",
+    recipe: [{ productId: 2, productName: "Помидор", quantityPerPortion: 0.1 }],
+    availablePortions: 5, inStopList: false, manuallyStopped: false,
+    promoUntil: null, isPromo: false, reason: null,
+  },
+  {
+    id: 3, name: "Цезарь",
+    recipe: [{ productId: 1, productName: "Курица", quantityPerPortion: 0.2 }],
+    availablePortions: 0, inStopList: true, manuallyStopped: false,
+    promoUntil: null, isPromo: false,
+    reason: "Недостаточно Курица: нужно 0.20 кг, доступно 0.05 кг",
   },
 ];
-let mockDishId = 3;
+let mockDishId = 4;
 
 // Список блюд
 export async function getDishes(): Promise<Dish[]> {
-  if (USE_MOCK) return mockDishes.map((d) => ({ ...d }));
+  if (USE_MOCK) return [...mockDishes];
   const res = await api.get<Dish[]>("/dishes");
   return res.data;
 }
@@ -462,6 +467,9 @@ export async function createDish(data: DishData): Promise<Dish> {
       }),
       availablePortions: portionsFromStock(data.recipe),
       inStopList: false,
+      manuallyStopped: false,
+      promoUntil: null,
+      isPromo: false,
       reason: null,
     };
     mockDishes.push(dish);
@@ -594,7 +602,7 @@ const mockDashboard: DashboardData = {
     { productName: "Сливки", unit: "л", quantity: 1.8, expiryDate: "2026-10-10", daysLeft: 1, deliveryNumber: "П-1001" },
     { productName: "Курица", unit: "кг", quantity: 2.25, expiryDate: "2026-10-12", daysLeft: 2, deliveryNumber: "П-1002" },
     { productName: "Сыр", unit: "кг", quantity: 2.25, expiryDate: "2026-10-13", daysLeft: 3, deliveryNumber: "П-1003" },
-    { productName: "Картофель", unit: "кг", quantity: 0.8, expiryDate: "2026-10-14", daysLeft: 4, deliveryNumber: "П-1004" },
+    { productName: "Карбонара", unit: "кг", quantity: 0.8, expiryDate: "2026-10-14", daysLeft: 4, deliveryNumber: "П-1004" },
   ],
   expired: [
     { productName: "Масло", unit: "л", quantity: 0.3, expiryDate: "2026-10-08", daysOverdue: 1, deliveryNumber: "П-0990" },
@@ -611,10 +619,13 @@ const mockDashboard: DashboardData = {
 
 // Заглушки горячих предложений, отсортированные по приоритету
 const mockOffers: HotOffer[] = [
-  { id: 1, name: "Карбонара", priority: 22.5, coverPortions: 9, reason: "Сливки: срок 1 дн., остаток 1.80 л — хватит на 9 порций" },
-  { id: 2, name: "Цезарь", priority: 11.3, coverPortions: 11, reason: "Курица: срок 2 дн., остаток 2.25 кг — хватит на 11 порций" },
-  { id: 3, name: "Куриный суп", priority: 7.5, coverPortions: 22, reason: "Курица: срок 2 дн., остаток 2.25 кг — хватит на 22 порций" },
+  { id: 1, name: "Карбонара", priority: 22.5, coverPortions: 9, reason: "Сливки: срок 1 дн., остаток 1.80 л — хватит на 9 порций", isPromo: false },
+  { id: 2, name: "Цезарь", priority: 11.3, coverPortions: 11, reason: "Курица: срок 2 дн., остаток 2.25 кг — хватит на 11 порций", isPromo: false },
+  { id: 3, name: "Куриный суп", priority: 7.5, coverPortions: 22, reason: "Курица: срок 2 дн., остаток 2.25 кг — хватит на 22 порций", isPromo: false },
 ];
+
+// Какие блюда сейчас «Блюдо дня» — живёт в памяти, пока USE_MOCK = true
+const mockPromoIds = new Set<number>();
 
 // Данные для дашборда одним запросом
 export async function getDashboard(): Promise<DashboardData> {
@@ -623,11 +634,24 @@ export async function getDashboard(): Promise<DashboardData> {
   return res.data;
 }
 
-// Горячие предложения (сервер возвращает объект { offers: [...] })
+// Горячие предложения (сервер возвращает объект { offers: [...] }).
+// В заглушке подмешиваем актуальный статус акции из mockPromoIds.
 export async function getHotOffers(): Promise<{ offers: HotOffer[] }> {
-  if (USE_MOCK) return { offers: mockOffers };
+  if (USE_MOCK) {
+    return { offers: mockOffers.map((o) => ({ ...o, isPromo: mockPromoIds.has(o.id) })) };
+  }
   const res = await api.get<{ offers: HotOffer[] }>("/hot-offers");
   return res.data;
+}
+
+// Включить/выключить «Блюдо дня»: until = "ГГГГ-ММ-ДД" или null (отмена)
+export async function setDishPromo(id: number, until: string | null): Promise<void> {
+  if (USE_MOCK) {
+    if (until) mockPromoIds.add(id);
+    else mockPromoIds.delete(id);
+    return;
+  }
+  await api.put(`/dishes/${id}/promo`, { until });
 }
 
 // --- Заготовки для будущих разделов ---

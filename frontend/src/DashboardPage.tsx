@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDashboard, getHotOffers } from "./api";
+import { getDashboard, getHotOffers, setDishPromo } from "./api";
 import type { DashboardData, HotOffer } from "./api";
 
 // Стили — копия палитры из макета управляющий-дашборд-макет.html
@@ -39,6 +39,7 @@ const css = `
         white-space: nowrap; }
 .pill-high { background: #fbe9e8; color: #d0342c; }
 .pill-mid { background: #fdf1dd; color: #a5701f; }
+.pill-promo { background: #e9f7ef; color: #2f9e63; border: 1px solid #bfe8cf; }
 .hot-act { background: #e4692a; color: #fff; border: none; border-radius: 8px;
            padding: 7px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
            white-space: nowrap; }
@@ -113,6 +114,23 @@ export default function DashboardPage() {
     })();
   }, []);
 
+  // Кнопка «В акцию» / «Отменить»: включает или выключает «Блюдо дня»
+  const togglePromo = async (offer: HotOffer) => {
+    const today = new Date().toISOString().slice(0, 10); // "ГГГГ-ММ-ДД"
+    const next = !offer.isPromo;
+    try {
+      await setDishPromo(offer.id, next ? today : null);
+      // Статус сохранился — обновляем только эту строку
+      setOffers((prev) =>
+        prev.map((o) => (o.id === offer.id ? { ...o, isPromo: next } : o))
+      );
+      setError("");
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(e.response?.data?.error ?? e.message ?? "Не удалось изменить акцию");
+    }
+  };
+
   return (
     <div>
       <style>{css}</style>
@@ -155,13 +173,27 @@ export default function DashboardPage() {
               <div className="hot-row" key={offer.id}>
                 <div className="hot-dish">{offer.name}</div>
                 <div className="hot-reason">{offer.reason}</div>
-                <span className={offer.priority >= 15 ? "pill pill-high" : "pill pill-mid"}>
-                  {offer.priority >= 15 ? "Высокий" : "Средний"}
-                </span>
-                {index === 0 ? (
-                  <button className="hot-act">В акцию</button>
+
+                {offer.isPromo ? (
+                  <>
+                    <span className="pill pill-promo">Блюдо дня ✓</span>
+                    <button className="hot-act ghost" onClick={() => togglePromo(offer)}>
+                      Отменить
+                    </button>
+                  </>
                 ) : (
-                  <button className="hot-act ghost">Предложить</button>
+                  <>
+                    <span className={offer.priority >= 15 ? "pill pill-high" : "pill pill-mid"}>
+                      {offer.priority >= 15 ? "Высокий" : "Средний"}
+                    </span>
+                    {index === 0 ? (
+                      <button className="hot-act" onClick={() => togglePromo(offer)}>
+                        В акцию
+                      </button>
+                    ) : (
+                      <button className="hot-act ghost">Предложить</button>
+                    )}
+                  </>
                 )}
               </div>
             ))}
