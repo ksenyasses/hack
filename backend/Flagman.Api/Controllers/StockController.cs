@@ -2,10 +2,12 @@ using Flagman.Api.Data;
 using Flagman.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
 [ApiController]
+[Authorize(Roles = "Manager,Cook")]
 public class StockController : ControllerBase
 {
     private readonly AppDbContext _db;

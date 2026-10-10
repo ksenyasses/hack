@@ -1,10 +1,12 @@
 using Flagman.Api.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
 [ApiController]
+[Authorize]
 public class MovementsController : ControllerBase
 {
     private readonly AppDbContext _db;

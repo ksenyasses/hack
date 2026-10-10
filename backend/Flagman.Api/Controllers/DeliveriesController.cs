@@ -4,11 +4,13 @@ using Flagman.Api.Models;
 using Flagman.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
 [ApiController]
 [Route("api/deliveries")]
+[Authorize(Roles = "Manager,Cook")]
 public class DeliveriesController : ControllerBase
 {
     private readonly AppDbContext _db;

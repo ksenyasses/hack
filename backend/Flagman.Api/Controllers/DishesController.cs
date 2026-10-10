@@ -3,11 +3,13 @@ using Flagman.Api.Models;
 using Flagman.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
 [ApiController]
 [Route("api/dishes")]
+[Authorize]
 public class DishesController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -55,6 +57,7 @@ public class DishesController : ControllerBase
 
     // POST /api/dishes — создать блюдо вместе с рецептом
     [HttpPost]
+    [Authorize(Roles = "Manager")]
     public async Task<ActionResult> Create(DishRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -87,6 +90,7 @@ public class DishesController : ControllerBase
 
     // PUT /api/dishes/{id} — изменить блюдо и полностью заменить рецепт
     [HttpPut("{id}")]
+    [Authorize(Roles = "Manager")]
     public async Task<ActionResult> Update(int id, DishRequest request)
     {
         var dish = await _db.Dishes.FindAsync(id);

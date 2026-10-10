@@ -3,11 +3,13 @@ using Flagman.Api.Data;
 using Flagman.Api.Models;
 using Flagman.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
 [ApiController]
 [Route("api/writeoffs")]
+[Authorize(Roles = "Manager,Cook")]
 public class WriteOffsController : ControllerBase
 {
     private readonly AppDbContext _db;

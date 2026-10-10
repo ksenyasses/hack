@@ -4,11 +4,13 @@ using Flagman.Api.Models;
 using Flagman.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
 [ApiController]
 [Route("api/orders")]
+[Authorize]
 public class OrdersController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -20,6 +22,7 @@ public class OrdersController : ControllerBase
 
     // POST /api/orders — заказ из нескольких блюд
     [HttpPost]
+    [Authorize(Roles = "Waiter,Manager")]
     public async Task<ActionResult> Create(OrderRequest request)
     {
         if (request.Items is null || request.Items.Count == 0)

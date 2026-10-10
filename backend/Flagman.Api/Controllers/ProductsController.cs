@@ -2,11 +2,13 @@ using Flagman.Api.Data;
 using Flagman.Api.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flagman.Api.Controllers;
 
 [ApiController]
 [Route("api/products")]
+[Authorize]
 public class ProductsController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -30,6 +32,7 @@ public class ProductsController : ControllerBase
 
     // POST /api/products — добавить продукт
     [HttpPost]
+    [Authorize(Roles = "Manager,Cook")]
     public async Task<ActionResult> Create(ProductRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -55,6 +58,7 @@ public class ProductsController : ControllerBase
 
     // PUT /api/products/{id} — изменить продукт
     [HttpPut("{id}")]
+    [Authorize(Roles = "Manager")]
     public async Task<ActionResult> Update(int id, ProductRequest request)
     {
         var product = await _db.Products.FindAsync(id);
@@ -72,6 +76,7 @@ public class ProductsController : ControllerBase
 
     // DELETE /api/products/{id} — «удаление» = убрать в архив
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Manager")]
     public async Task<ActionResult> Archive(int id)
     {
         var product = await _db.Products.FindAsync(id);
