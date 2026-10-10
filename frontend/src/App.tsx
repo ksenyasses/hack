@@ -2,6 +2,9 @@ import { useState } from "react";
 import LoginPage from "./LoginPage";
 import Layout, { MENU_BY_ROLE } from "./Layout";
 import ProductsPage from "./ProductsPage";
+import StockPage from "./StockPage";
+import DeliveryPage from "./DeliveryPage";
+import DishesPage from "./DishesPage";
 
 // Текущая роль из localStorage (по умолчанию — Управляющий)
 const storedRole = () => localStorage.getItem("role") ?? "Manager";
@@ -31,6 +34,15 @@ function App() {
     return <LoginPage onSuccess={handleSuccess} />;
   }
 
+  // Какой раздел рисуем в рабочей области
+  const renderSection = () => {
+    if (section === "Продукты") return <ProductsPage />;
+    if (section === "Склад") return <StockPage />;
+    if (section === "Приёмка") return <DeliveryPage />;
+    if (section === "Блюда") return <DishesPage />;
+    return <p className="stub">Раздел в разработке</p>;
+  };
+
   // Токен есть — каркас с меню; справа рисуем выбранный раздел
   return (
     <Layout
@@ -40,7 +52,7 @@ function App() {
       current={section}
       onSelect={setSection}
     >
-      {section === "Продукты" ? <ProductsPage /> : <p className="stub">Раздел в разработке</p>}
+      {renderSection()}
     </Layout>
   );
 }
