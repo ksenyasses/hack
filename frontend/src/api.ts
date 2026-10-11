@@ -93,9 +93,7 @@ export type RecipeItem = {
   quantityPerPortion: number;
 };
 
-// Блюдо с рецептом и доступностью.
-// Рецепт — тот же набор полей, что и в задании бэкендера
-// ({ productId, productName, quantityPerPortion }), просто собран в тип RecipeItem.
+// Блюдо с рецептом и доступностью
 export type Dish = {
   id: number;
   name: string;
@@ -161,11 +159,19 @@ export type LowStockItem = {
   toOrder: number;
 };
 
-// Блюдо в стоп-листе
+// Блюдо в стоп-листе (для блока на дашборде)
 export type StopItem = {
   id: number;
   name: string;
   reason: string;
+};
+
+// Строка стоп-листа: блюдо, которого сейчас нельзя продавать
+export type StopListItem = {
+  id: number;
+  name: string;
+  availablePortions: number;
+  reason: string | null;
 };
 
 // Всё, что нужно дашборду, одним куском
@@ -602,7 +608,7 @@ const mockDashboard: DashboardData = {
     { productName: "Сливки", unit: "л", quantity: 1.8, expiryDate: "2026-10-10", daysLeft: 1, deliveryNumber: "П-1001" },
     { productName: "Курица", unit: "кг", quantity: 2.25, expiryDate: "2026-10-12", daysLeft: 2, deliveryNumber: "П-1002" },
     { productName: "Сыр", unit: "кг", quantity: 2.25, expiryDate: "2026-10-13", daysLeft: 3, deliveryNumber: "П-1003" },
-    { productName: "Карбонара", unit: "кг", quantity: 0.8, expiryDate: "2026-10-14", daysLeft: 4, deliveryNumber: "П-1004" },
+    { productName: "Картофель", unit: "кг", quantity: 0.8, expiryDate: "2026-10-14", daysLeft: 4, deliveryNumber: "П-1004" },
   ],
   expired: [
     { productName: "Масло", unit: "л", quantity: 0.3, expiryDate: "2026-10-08", daysOverdue: 1, deliveryNumber: "П-0990" },
@@ -654,9 +660,25 @@ export async function setDishPromo(id: number, until: string | null): Promise<vo
   await api.put(`/dishes/${id}/promo`, { until });
 }
 
-// --- Заготовки для будущих разделов ---
-export async function getStopList() {
-  if (USE_MOCK) return [];
-  const res = await api.get("/stop-list");
-  return res.data;
+// --- Стоп-лист ---
+
+// Заглушка: блюда, которые сейчас нельзя продавать
+const mockStopList: StopListItem[] = [
+  { id: 3, name: "Цезарь", availablePortions: 0, reason: "Недостаточно курицы" },
+  { id: 1, name: "Карбонара", availablePortions: 0, reason: "Недостаточно сливок" },
+  { id: 2, name: "Том-ям", availablePortions: 0, reason: "Закончились кокосовое молоко" },
+];
+
+// Стоп-лист: GET /api/stop-list отдаёт только недоступные блюда.
+// Колонку «с какого времени» бэк не отдаёт — история не хранится, её и не рисуем.
+export async function getStopList(): Promise<StopListItem[]> {
+  if (USE_MOCK) return [...mockStopList];
+  try {
+    const res = await api.get<StopListItem[]>("/stop-list");
+    return res.data;
+  } catch (e: unknown) {
+    // Ошибки бэкенда приходят как { "error": "текст" }
+    const err = e as { response?: { data?: { error?: string } }; message?: string };
+    throw new Error(err.response?.data?.error ?? err.message ?? "Не удалось загрузить стоп-лист");
+  }
 }
