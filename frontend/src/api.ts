@@ -195,6 +195,47 @@ export type HotOffer = {
   isPromo: boolean;
 };
 
+// Просроченная партия: её нельзя продавать — только списать
+export type WriteOffBatch = {
+  productId: number;
+  productName: string;
+  unit: string;
+  quantity: number;
+  expiryDate: string;
+  daysOverdue: number;
+};
+
+// Что отдаёт GET /hot-offers: предложения + просрочка к списанию
+export type HotOffersData = {
+  offers: HotOffer[];
+  toWriteOff: WriteOffBatch[];
+};
+
+// Причина списания — enum с бэкенда
+export type WriteOffReason = "Expiry" | "Spoilage" | "Damage" | "Other";
+
+// Названия причин для выпадающих списков
+export const WRITE_OFF_REASONS: { value: WriteOffReason; label: string }[] = [
+  { value: "Expiry", label: "Просрочка" },
+  { value: "Spoilage", label: "Испорченный" },
+  { value: "Damage", label: "Повреждение" },
+  { value: "Other", label: "Другое" },
+];
+
+// Одна запись журнала операций (для истории списаний)
+export type Movement = {
+  id: number;
+  createdAt: string;
+  productName: string;
+  userName: string;
+  batchId: number | null;
+  batchExpiry: string | null;
+  quantityDelta: number;
+  type: string;
+  reason: string | null;
+  orderId: number | null;
+};
+
 // Дата через N дней от сегодня в формате YYYY-MM-DD (для заглушки)
 function inDays(days: number): string {
   const d = new Date();
@@ -630,6 +671,11 @@ const mockOffers: HotOffer[] = [
   { id: 3, name: "Куриный суп", priority: 7.5, coverPortions: 22, reason: "Курица: срок 2 дн., остаток 2.25 кг — хватит на 22 порций", isPromo: false },
 ];
 
+// Просрочка: её нельзя продавать — только списать
+const mockToWriteOff: WriteOffBatch[] = [
+  { productId: 2, productName: "Помидор", unit: "кг", quantity: 6.37, expiryDate: "2026-10-08", daysOverdue: 2 },
+];
+
 // Какие блюда сейчас «Блюдо дня» — живёт в памяти, пока USE_MOCK = true
 const mockPromoIds = new Set<number>();
 
@@ -640,13 +686,17 @@ export async function getDashboard(): Promise<DashboardData> {
   return res.data;
 }
 
-// Горячие предложения (сервер возвращает объект { offers: [...] }).
-// В заглушке подмешиваем актуальный статус акции из mockPromoIds.
-export async function getHotOffers(): Promise<{ offers: HotOffer[] }> {
+// Горячие предложения + просрочка к списанию (сервер возвращает HotOffersData).
+// В заглушке подмешиваем актуальный статус акции из mockPromoIds —
+// из-за этого карточка на дашборде продолжает работать без изменений.
+export async function getHotOffers(): Promise<HotOffersData> {
   if (USE_MOCK) {
-    return { offers: mockOffers.map((o) => ({ ...o, isPromo: mockPromoIds.has(o.id) })) };
+    return {
+      offers: mockOffers.map((o) => ({ ...o, isPromo: mockPromoIds.has(o.id) })),
+      toWriteOff: mockToWriteOff,
+    };
   }
-  const res = await api.get<{ offers: HotOffer[] }>("/hot-offers");
+  const res = await api.get<HotOffersData>("/hot-offers");
   return res.data;
 }
 
@@ -681,4 +731,73 @@ export async function getStopList(): Promise<StopListItem[]> {
     const err = e as { response?: { data?: { error?: string } }; message?: string };
     throw new Error(err.response?.data?.error ?? err.message ?? "Не удалось загрузить стоп-лист");
   }
+}
+
+// --- Списания ---
+
+// Заглушка истории списаний: свежие сверху
+const mockWriteoffs: Movement[] = [
+  {
+    id: 3, createdAt: "2026-10-10T15:20:00Z", productName: "Помидор",
+    userName: "Повар", batchId: 20, batchExpiry: "2026-10-08",
+    quantityDelta: -6.37, type: "WriteOff", reason: "Expiry", orderId: null,
+  },
+  {
+    id: 2, createdAt: "2026-10-10T11:05:00Z", productName: "Масло",
+    userName: "Повар", batchId: 13, batchExpiry: "2026-10-11",
+    quantityDelta: -1.11, type: "WriteOff", reason: "Spoilage", orderId: null,
+  },
+  {
+    id: 1, createdAt: "2026-10-09T18:40:00Z", productName: "Курица",
+    userName: "Повар", batchId: 15, batchExpiry: "2026-10-11",
+    quantityDelta: -0.9, type: "WriteOff", reason: "Damage", orderId: null,
+  },
+];
+
+// Списать продукт: POST /api/writeoffs. Партии выбирает сервер по FEFO,
+// фронт только отправляет productId, quantity и причину.
+export async function createWriteoff(
+  productId: number,
+  quantity: number,
+  reason: WriteOffReason
+): Promise<{ message: string; productId: number; quantity: number; reason: string }> {
+  if (USE_MOCK) {
+    const s = mockStockData.find((x) => x.id === productId);
+    if (!s || s.quantity < quantity) {
+      throw new Error("Недостаточно продукта для списания");
+    }
+    // Уменьшаем остаток и добавляем запись в историю
+    s.quantity = Number((s.quantity - quantity).toFixed(3));
+    mockWriteoffs.unshift({
+      id: Date.now(),
+      createdAt: new Date().toISOString(),
+      productName: s.name,
+      userName: "Повар",
+      batchId: null,
+      batchExpiry: null,
+      quantityDelta: -quantity,
+      type: "WriteOff",
+      reason,
+      orderId: null,
+    });
+    return { message: "Списано", productId, quantity, reason };
+  }
+  try {
+    const res = await api.post<{ message: string; productId: number; quantity: number; reason: string }>(
+      "/writeoffs",
+      { productId, quantity, reason }
+    );
+    return res.data;
+  } catch (e: unknown) {
+    // Ошибки бэкенда приходят как { "error": "текст" }
+    const err = e as { response?: { data?: { error?: string } }; message?: string };
+    throw new Error(err.response?.data?.error ?? err.message ?? "Не удалось списать");
+  }
+}
+
+// История списаний: GET /api/movements?type=WriteOff&limit=50
+export async function getWriteoffHistory(limit = 50): Promise<Movement[]> {
+  if (USE_MOCK) return mockWriteoffs.slice(0, limit);
+  const res = await api.get<Movement[]>(`/movements?type=WriteOff&limit=${limit}`);
+  return res.data;
 }

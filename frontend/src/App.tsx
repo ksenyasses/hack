@@ -9,6 +9,8 @@ import DishesPage from "./DishesPage";
 import NewOrderPage from "./NewOrderPage";
 import MenuPage from "./MenuPage";
 import StopListPage from "./StopListPage";
+import WriteOffPage from "./WriteOffPage";
+import HotOffersPage from "./HotOffersPage";
 
 // Текущая роль из localStorage (по умолчанию — Управляющий)
 const storedRole = () => localStorage.getItem("role") ?? "Manager";
@@ -42,12 +44,14 @@ function App() {
   const renderSection = () => {
     if (section === "Дашборд") return <DashboardPage />;
     if (section === "Продукты") return <ProductsPage />;
+    if (section === "Блюда") return <DishesPage />;
     if (section === "Склад") return <StockPage />;
     if (section === "Приёмка") return <DeliveryPage />;
-    if (section === "Блюда") return <DishesPage />;
+    if (section === "Списание") return <WriteOffPage />;
+    if (section === "Стоп-лист") return <StopListPage />;
+    if (section === "Горячие предложения") return <HotOffersPage />;
     if (section === "Новый заказ") return <NewOrderPage />;
     if (section === "Меню") return <MenuPage />;
-    if (section === "Стоп-лист") return <StopListPage />;
     return <p className="stub">Раздел в разработке</p>;
   };
 
