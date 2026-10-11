@@ -1,5 +1,6 @@
 using Flagman.Api.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace Flagman.Api.Services;
 
@@ -28,7 +29,8 @@ public static class AvailabilityService
 
         var portions = int.MaxValue;
         string? reason = null;
-
+        
+        var ci = CultureInfo.GetCultureInfo("ru-RU");
         foreach (var item in recipe)
         {
             var product = await db.Products.FindAsync(item.ProductId);
@@ -48,7 +50,7 @@ public static class AvailabilityService
             if (canCook < portions)
             {
                 portions = canCook;
-                reason = $"Недостаточно {product?.Name}: нужно {item.QuantityPerPortion:0.00} {unit}, доступно {available:0.00} {unit}";
+                reason = $"Недостаточно «{product?.Name}»: нужно {item.QuantityPerPortion.ToString("0.00", ci)} {unit}, доступно {available.ToString("0.00", ci)} {unit}";
             }
         }
 

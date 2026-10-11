@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flagman.Api.Data;
 using Flagman.Api.Models;
 using Microsoft.EntityFrameworkCore;
@@ -43,13 +44,14 @@ public static class FefoWriter
         AppDbContext db, List<ProductBatch> batches, decimal needed, int productId,
         int? orderId, MovementType type, WriteOffReason? reason, int userId)
     {
+        var ci = CultureInfo.GetCultureInfo("ru-RU");
         var total = batches.Sum(b => b.Quantity);
 
         if (total < needed)
         {
             var product = await db.Products.FindAsync(productId);
             throw new NotEnoughStockException(
-                $"Недостаточно {product?.Name?.ToLower()}: нужно {needed:0.00} {product?.Unit}, доступно {total:0.00} {product?.Unit}");
+                $"Недостаточно «{product?.Name}»: нужно {needed.ToString("0.00", ci)} {product?.Unit}, доступно {total.ToString("0.00", ci)} {product?.Unit}");
         }
 
         var left = needed;

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>FLAGMAN — Списание (макет)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+
+  /* --- Каркас: копия стилей из frontend/src/Layout.tsx --- */
+  .layout { min-height: 100vh; display: flex; flex-direction: column; background: #f5f6f8; }
+  .topbar { height: 64px; background: #2c3d4f; display: flex; align-items: center;
+            justify-content: space-between; padding: 0 24px; }
+  .brand { color: #fff; font-size: 21px; font-weight: 800; letter-spacing: 2px; }
+  .topbar-right { display: flex; align-items: center; gap: 16px; }
+  .user { color: #d5dde6; font-size: 14px; }
+  .logout { background: #47566b; color: #fff; border: none; border-radius: 6px;
+            padding: 9px 18px; font-size: 14px; font-weight: 600; }
+  .body { flex: 1; display: flex; }
+  .sidebar { width: 240px; background: #33495e; padding-top: 12px; flex-shrink: 0; }
+  .nav-item { display: block; width: 100%; text-align: left; padding: 12px 21px;
+              font-size: 15px; color: #c7d3de; background: none;
+              border: none; border-left: 3px solid transparent; }
+  .nav-item.active { background: #3c546b; color: #fff; font-weight: 700;
+                     border-left-color: #5bb0e0; }
+  .content { flex: 1; padding: 28px 32px; }
+
+  /* --- Страница списания --- */
+  .page-title { font-size: 22px; font-weight: 700; margin: 0; color: #1f2b38; }
+  .page-sub { font-size: 13.5px; color: #7b8794; margin: 7px 0 0; max-width: 760px; line-height: 1.5; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 20px 0 18px; }
+  .kpi { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px;
+         padding: 16px 18px; display: flex; align-items: center; gap: 14px; }
+  .kpi .badge { width: 44px; height: 44px; border-radius: 10px; flex: 0 0 44px;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 20px; font-weight: 800; }
+  .kpi .val { font-size: 24px; font-weight: 700; line-height: 1; color: #1f2b38; }
+  .kpi .lbl { font-size: 12.5px; color: #7b8794; margin-top: 5px; }
+  .b-red { background: #fbe9e8; color: #d0342c; }
+  .b-amber { background: #fdf1dd; color: #e0902a; }
+
+  .cols { display: grid; grid-template-columns: 400px 1fr; gap: 16px; align-items: start; }
+  .card { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px; padding: 20px 22px; }
+  .card-title { font-size: 15px; font-weight: 700; color: #1f2b38; margin: 0 0 16px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12.5px; color: #7b8794; margin-bottom: 6px; }
+  .field select, .field input { width: 100%; height: 40px; padding: 0 12px; font-size: 14px;
+    color: #1f2b38; background: #fff; border: 1px solid #d6dbdf; border-radius: 6px; outline: none; }
+  .field input:focus, .field select:focus { border-color: #2e7fb5; box-shadow: 0 0 0 2px rgba(46,127,181,0.15); }
+
+  .btn-write { width: 100%; height: 44px; margin-top: 4px; font-size: 15px; font-weight: 700;
+               color: #fff; background: #d0342c; border: none; border-radius: 6px; cursor: pointer; }
+  .btn-write:hover { background: #b52b24; }
+  .hint { margin: 14px 0 0; padding: 11px 13px; font-size: 12.5px; line-height: 1.5;
+          color: #7b8794; background: #f6f7f8; border: 1px solid #e8ebed; border-radius: 8px; }
+
+  .table { width: 100%; border-collapse: collapse; }
+  .table th { background: #f5f7f8; text-align: left; padding: 12px 14px;
+              font-size: 13px; font-weight: 700; color: #344054; }
+  .table td { padding: 13px 14px; border-top: 1px solid #eef0f3; font-size: 13.5px; color: #4b5563; }
+  .name { font-weight: 600; color: #1f2b38; }
+  .qty { font-weight: 700; color: #1f2b38; }
+  .chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 3px 9px;
+          border-radius: 999px; background: #eef1f5; color: #5a6675; }
+  .chip-expiry { background: #fbe9e8; color: #d0342c; }
+  .empty { color: #7b8794; font-size: 13.5px; padding: 8px 0 2px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <header class="topbar">
+    <div class="brand">FLAGMAN</div>
+    <div class="topbar-right">
+      <span class="user">Иван Петров • Повар</span>
+      <button class="logout">Выйти</button>
+    </div>
+  </header>
+
+  <div class="body">
+    <nav class="sidebar">
+      <button class="nav-item">Приёмка</button>
+      <button class="nav-item">Продукты</button>
+      <button class="nav-item">Склад</button>
+      <button class="nav-item active">Списание</button>
+      <button class="nav-item">Стоп-лист</button>
+      <button class="nav-item">Журнал</button>
+    </nav>
+
+    <main class="content">
+      <h1 class="page-title">Списание</h1>
+      <p class="page-sub">Списываем испорченное и просроченное. Партии выбираются автоматически
+        по FEFO: сначала та, у которой срок ближе всего, просроченная уходит первой.</p>
+
+      <div class="kpi-row">
+        <div class="kpi">
+          <span class="badge b-red">!</span>
+          <div>
+            <div class="val">6,370 кг</div>
+            <div class="lbl">Просрочено — ждёт списания</div>
+          </div>
+        </div>
+        <div class="kpi">
+          <span class="badge b-amber">3</span>
+          <div>
+            <div class="val">2 партии</div>
+            <div class="lbl">Скоро истекают — до 3 дней</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cols">
+        <!-- Левая колонка — форма -->
+        <div class="card">
+          <h2 class="card-title">Новое списание</h2>
+
+          <div class="field">
+            <label>Продукт</label>
+            <select>
+              <option>Помидор (кг)</option>
+              <option>Курица (кг)</option>
+              <option>Масло (л)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Количество</label>
+            <input type="text" value="6,370">
+          </div>
+
+          <div class="field">
+            <label>Причина</label>
+            <select>
+              <option>Просрочка</option>
+              <option>Испорченный</option>
+              <option>Повреждение</option>
+              <option>Другое</option>
+            </select>
+          </div>
+
+          <button class="btn-write">Списать</button>
+
+          <p class="hint">Остаток сейчас: <b>20,360 кг</b>. Будет списано по FEFO —
+            сначала просроченная партия от 08.10, затем ближайшая по сроку.
+            Если указать больше, чем есть, сервер откажет и покажет, сколько доступно.</p>
+        </div>
+
+        <!-- Правая колонка — история -->
+        <div class="card">
+          <h2 class="card-title">Последние списания</h2>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Когда</th>
+                <th>Продукт</th>
+                <th>Количество</th>
+                <th>Причина</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>сегодня, 15:20</td>
+                <td class="name">Помидор</td>
+                <td class="qty">6,370 кг</td>
+                <td><span class="chip chip-expiry">Просрочка</span></td>
+              </tr>
+              <tr>
+                <td>сегодня, 11:05</td>
+                <td class="name">Масло</td>
+                <td class="qty">1,110 л</td>
+                <td><span class="chip">Испорченный</span></td>
+              </tr>
+              <tr>
+                <td>09.10, 18:40</td>
+                <td class="name">Курица</td>
+                <td class="qty">0,900 кг</td>
+                <td><span class="chip">Повреждение</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="empty">Показаны последние 3 операции. Полный журнал — в разделе «Журнал».</p>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

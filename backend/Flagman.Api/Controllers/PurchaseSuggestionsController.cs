@@ -2,6 +2,7 @@ using Flagman.Api.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using System.Globalization;
 
 namespace Flagman.Api.Controllers;
 
@@ -31,7 +32,7 @@ public class PurchaseSuggestionsController : ControllerBase
                     .Sum(b => (decimal?)b.Quantity) ?? 0
             })
             .ToListAsync();
-
+        var ci = CultureInfo.GetCultureInfo("ru-RU");
         // Предлагаем докупить только там, где остаток упал ниже минимального
         var items = rows
             .Where(x => x.quantity < x.MinStock)
@@ -43,7 +44,7 @@ public class PurchaseSuggestionsController : ControllerBase
                 quantity = x.quantity,
                 minStock = x.MinStock,
                 toOrder = Math.Round(x.MinStock - x.quantity, 2),
-                reason = $"Остаток {x.quantity:0.00} {x.Unit} при минимуме {x.MinStock:0.00} {x.Unit}"
+                reason = $"Остаток {x.quantity.ToString("0.00", ci)} {x.Unit} при минимуме {x.MinStock.ToString("0.00", ci)} {x.Unit}"
             });
 
         return Ok(items);

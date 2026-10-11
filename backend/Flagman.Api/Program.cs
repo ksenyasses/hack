@@ -74,7 +74,7 @@ if (app.Environment.IsDevelopment())
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// Сначала проверь пропуск, потом права, потом пускай к адресам
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

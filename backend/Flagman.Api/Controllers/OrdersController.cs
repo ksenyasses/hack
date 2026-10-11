@@ -5,6 +5,7 @@ using Flagman.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using System.Globalization;
 
 namespace Flagman.Api.Controllers;
 
@@ -60,7 +61,9 @@ public class OrdersController : ControllerBase
             orderItems.Add(new OrderItem { DishId = dish.Id, Quantity = item.Quantity });
         }
 
-        // 2. Проверяем наличие ДО любых изменений — чтобы отказать понятно
+         // 2. Проверяем наличие ДО любых изменений — чтобы отказать понятно
+        var ci = CultureInfo.GetCultureInfo("ru-RU");
+
         foreach (var (productId, required) in needed)
         {
             var available = await _db.ProductBatches
@@ -72,7 +75,7 @@ public class OrdersController : ControllerBase
                 var product = await _db.Products.FindAsync(productId);
                 return BadRequest(new
                 {
-                    error = $"Недостаточно {product?.Name?.ToLower()}: нужно {required:0.00} {product?.Unit}, доступно {available:0.00} {product?.Unit}"
+                    error = $"Недостаточно «{product?.Name}»: нужно {required.ToString("0.00", ci)} {product?.Unit}, доступно {available.ToString("0.00", ci)} {product?.Unit}"
                 });
             }
         }

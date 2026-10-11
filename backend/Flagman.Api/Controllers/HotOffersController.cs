@@ -112,8 +112,8 @@ public class HotOffersController : ControllerBase
                     var name = productInfo.GetValueOrDefault(item.ProductId)?.Name ?? "продукт";
                     var unit = productInfo.GetValueOrDefault(item.ProductId)?.Unit ?? "";
 
-                    // Число всегда с точкой, независимо от локали сервера
-                    var q = h.Quantity.ToString("0.00", CultureInfo.InvariantCulture);
+                    // Число всегда с запятой, независимо от локали сервера
+                    var q = h.Quantity.ToString("0.00", CultureInfo.GetCultureInfo("ru-RU"));
                     var portions = PortionsWord(cover);
 
                     reason = daysLeft == 0
