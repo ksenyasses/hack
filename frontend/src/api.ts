@@ -222,7 +222,7 @@ export const WRITE_OFF_REASONS: { value: WriteOffReason; label: string }[] = [
   { value: "Other", label: "Другое" },
 ];
 
-// Одна запись журнала операций (для истории списаний)
+// Одна запись журнала операций
 export type Movement = {
   id: number;
   createdAt: string;
@@ -234,6 +234,21 @@ export type Movement = {
   type: string;
   reason: string | null;
   orderId: number | null;
+};
+
+// Тип операции в журнале
+export type MovementType = "Receipt" | "Order" | "WriteOff";
+
+// Фильтры журнала: type/productId/from/to уходят на сервер.
+// productName — только для заглушки: в реальном ответе productId нет,
+// поэтому по продукту фильтрует сервер, а не клиент.
+export type MovementFilters = {
+  type?: MovementType;
+  productId?: number;
+  productName?: string;
+  from?: string; // "ГГГГ-ММ-ДД"
+  to?: string;
+  limit?: number;
 };
 
 // Дата через N дней от сегодня в формате YYYY-MM-DD (для заглушки)
@@ -799,5 +814,60 @@ export async function createWriteoff(
 export async function getWriteoffHistory(limit = 50): Promise<Movement[]> {
   if (USE_MOCK) return mockWriteoffs.slice(0, limit);
   const res = await api.get<Movement[]>(`/movements?type=WriteOff&limit=${limit}`);
+  return res.data;
+}
+
+// --- Журнал операций ---
+
+// Заглушка журнала: приёмка и продажи + всё из истории списаний.
+// id новые идут с 4 — чтобы не задеть id 1..3 из mockWriteoffs (иначе дубль ключа в React)
+const mockMovements: Movement[] = [
+  {
+    id: 7, createdAt: "2026-10-10T14:22:00Z", productName: "Курица",
+    userName: "Повар", batchId: 15, batchExpiry: "2026-10-11",
+    quantityDelta: 3, type: "Receipt", reason: null, orderId: null,
+  },
+  {
+    id: 6, createdAt: "2026-10-10T14:35:00Z", productName: "Курица",
+    userName: "Официант", batchId: 15, batchExpiry: "2026-10-11",
+    quantityDelta: -0.75, type: "Order", reason: null, orderId: 1,
+  },
+  {
+    id: 5, createdAt: "2026-10-10T15:10:00Z", productName: "Курица",
+    userName: "Официант", batchId: 19, batchExpiry: "2026-10-13",
+    quantityDelta: -0.15, type: "Order", reason: null, orderId: 1,
+  },
+  {
+    id: 4, createdAt: "2026-10-10T15:40:00Z", productName: "Помидор",
+    userName: "Повар", batchId: 20, batchExpiry: "2026-10-08",
+    quantityDelta: -0.3, type: "WriteOff", reason: "Expiry", orderId: null,
+  },
+  ...mockWriteoffs,
+];
+
+// Журнал операций: GET /api/movements?limit=100&type=...&productId=...&from=...&to=...
+// Сортируем по времени (свежие сверху) — так надёжнее, чем по id:
+// в заглушке истории списаний id независимы от времени.
+export async function getMovements(f: MovementFilters = {}): Promise<Movement[]> {
+  if (USE_MOCK) {
+    let rows = [...mockMovements].sort(
+      (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id
+    );
+    if (f.type) rows = rows.filter((m) => m.type === f.type);
+    // productId в ответе сервера нет — в заглушке сопоставляем по имени продукта
+    if (f.productName) rows = rows.filter((m) => m.productName === f.productName);
+    const from = f.from;
+    const to = f.to;
+    if (from) rows = rows.filter((m) => m.createdAt.slice(0, 10) >= from);
+    if (to) rows = rows.filter((m) => m.createdAt.slice(0, 10) <= to);
+    return rows.slice(0, f.limit ?? 100);
+  }
+  const params = new URLSearchParams();
+  if (f.type) params.set("type", f.type);
+  if (f.productId) params.set("productId", String(f.productId));
+  if (f.from) params.set("from", f.from);
+  if (f.to) params.set("to", f.to);
+  params.set("limit", String(f.limit ?? 100));
+  const res = await api.get<Movement[]>(`/movements?${params.toString()}`);
   return res.data;
 }
