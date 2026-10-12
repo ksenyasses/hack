@@ -86,7 +86,7 @@ export type DeliveryData = {
   items: { productId: number; quantity: number; expiryDate?: string }[];
 };
 
-// Ингредиент блюда (одная строка рецепта)
+// Ингредиент блюда (одна строка рецепта)
 export type RecipeItem = {
   productId: number;
   productName: string;
@@ -682,12 +682,27 @@ export async function getOrders(): Promise<OrderResult[]> {
   return res.data;
 }
 
-// Заказы целиком — для раздела «Мои заказы» официанта.
-// В заглушке отдаём данные кухни: №12 (одно блюдо готово) и №11.
+// Заказы целиком — для разделов «Мои заказы» и «Кухня».
+// В заглушке отдаём данные кухни: №12 (одно блюдо уже готово) и №11.
 export async function getOrdersFull(): Promise<OrderFull[]> {
   if (USE_MOCK) return [...mockKitchen];
   const res = await api.get<OrderFull[]>("/orders");
   return res.data;
+}
+
+// Отметить блюдо готовым: PUT /api/orders/{id}/items/{itemId}/ready.
+// В заглушке ничего не делаем — страница сама красит блюдо в зелёное.
+export async function markItemReady(orderId: number, itemId: number): Promise<void> {
+  if (USE_MOCK) return;
+  try {
+    await api.put(`/orders/${orderId}/items/${itemId}/ready`);
+  } catch (e: unknown) {
+    // Ошибки бэкенда приходят как { "error": "текст" }
+    const err = e as { response?: { data?: { error?: string } }; message?: string };
+    throw new Error(
+      err.response?.data?.error ?? err.message ?? "Не удалось отметить блюдо готовым"
+    );
+  }
 }
 
 // --- Дашборд и горячие предложения ---
@@ -908,7 +923,7 @@ export async function getMovements(f: MovementFilters = {}): Promise<Movement[]>
   return res.data;
 }
 
-// --- Заказы кухни (для «Моих заказов» официанта) ---
+// --- Заказы кухни (для «Моих заказов» официанта и «Кухни» повара) ---
 
 // Заглушка: два заказа — №12 (одно блюдо уже готово) и №11
 const mockKitchen: OrderFull[] = [

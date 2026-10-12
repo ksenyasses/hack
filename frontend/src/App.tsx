@@ -13,6 +13,7 @@ import WriteOffPage from "./WriteOffPage";
 import HotOffersPage from "./HotOffersPage";
 import JournalPage from "./JournalPage";
 import MyOrdersPage from "./MyOrdersPage";
+import KitchenPage from "./KitchenPage";
 
 // Текущая роль из localStorage (по умолчанию — Управляющий)
 const storedRole = () => localStorage.getItem("role") ?? "Manager";
@@ -53,6 +54,7 @@ function App() {
     if (section === "Стоп-лист") return <StopListPage />;
     if (section === "Горячие предложения") return <HotOffersPage />;
     if (section === "Журнал") return <JournalPage />;
+    if (section === "Кухня") return <KitchenPage />;
     if (section === "Новый заказ") return <NewOrderPage />;
     if (section === "Мои заказы") return <MyOrdersPage />;
     if (section === "Меню") return <MenuPage />;
