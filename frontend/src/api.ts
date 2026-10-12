@@ -279,6 +279,37 @@ export type MovementFilters = {
   limit?: number;
 };
 
+// Рекомендация, что докупить — строка GET /purchase-suggestions
+export type PurchaseSuggestion = {
+  id: number;
+  name: string;
+  unit: string;
+  quantity: number;
+  minStock: number;
+  toOrder: number;
+  reason: string;
+};
+
+// Строка прогноза по блюду
+export type ForecastRow = {
+  dishId: number;
+  dishName: string;
+  availablePortions: number;
+  soldPortions: number;
+  portionsPerDay: number;
+  daysLeft: number | null; // null — продаж не было
+  limitingProduct: string | null;
+  status: string; // "В стоп-листе" | "Скоро закончится" | "Работает" | "Нет продаж"
+  comment: string;
+};
+
+// Ответ GET /forecast/stop-list?days=N
+export type ForecastData = {
+  periodDays: number;
+  atRisk: number;
+  dishes: ForecastRow[];
+};
+
 // Дата через N дней от сегодня в формате YYYY-MM-DD (для заглушки)
 function inDays(days: number): string {
   const d = new Date();
@@ -943,3 +974,46 @@ const mockKitchen: OrderFull[] = [
     ],
   },
 ];
+
+// --- Прогноз и поставки ---
+
+// Заглушка рекомендаций: что докупить
+const mockPurchase: PurchaseSuggestion[] = [
+  {
+    id: 1, name: "Курица", unit: "кг", quantity: 0,
+    minStock: 2, toOrder: 2,
+    reason: "Остаток 0,00 кг при минимуме 2,00 кг",
+  },
+];
+
+// Заглушка прогноза по блюдам
+const mockForecast: ForecastData = {
+  periodDays: 7,
+  atRisk: 2,
+  dishes: [
+    {
+      dishId: 1, dishName: "Цезарь", availablePortions: 0, soldPortions: 35,
+      portionsPerDay: 5, daysLeft: 0, limitingProduct: "Курица",
+      status: "В стоп-листе", comment: "Недостаточно «Курица»",
+    },
+    {
+      dishId: 2, dishName: "Куриный суп", availablePortions: 30, soldPortions: 21,
+      portionsPerDay: 3, daysLeft: 10, limitingProduct: "Курица",
+      status: "Работает", comment: "При текущем темпе хватит примерно на 10 дн.",
+    },
+  ],
+};
+
+// Что докупить — GET /purchase-suggestions
+export async function getPurchaseSuggestions(): Promise<PurchaseSuggestion[]> {
+  if (USE_MOCK) return [...mockPurchase];
+  const res = await api.get<PurchaseSuggestion[]>("/purchase-suggestions");
+  return res.data;
+}
+
+// Прогноз по блюдам на N дней — GET /forecast/stop-list?days=N
+export async function getStopListForecast(days = 7): Promise<ForecastData> {
+  if (USE_MOCK) return { ...mockForecast, periodDays: days };
+  const res = await api.get<ForecastData>(`/forecast/stop-list?days=${days}`);
+  return res.data;
+}
