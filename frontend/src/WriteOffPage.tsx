@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getProducts, getStock, getBatches, createWriteoff, getWriteoffHistory,
   WRITE_OFF_REASONS,
@@ -7,7 +7,7 @@ import type {
   Product, StockItem, BatchItem, Movement, WriteOffReason,
 } from "./api";
 
-// Стили — по макету design/повар списание.html
+// Стили — по макету design/повар списание.html + карточка «К списанию»
 const css = `
 .page-title { font-size: 22px; font-weight: 700; margin: 0; color: #1f2b38; }
 .page-sub { font-size: 13.5px; color: #7b8794; margin: 7px 0 0;
@@ -23,9 +23,13 @@ const css = `
 .kpi .lbl { font-size: 12.5px; color: #7b8794; margin-top: 5px; }
 .b-red { background: #fbe9e8; color: #d0342c; }
 .b-amber { background: #fdf1dd; color: #e0902a; }
-.cols { display: grid; grid-template-columns: 400px 1fr; gap: 16px; align-items: start; }
 .card { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px; padding: 20px 22px; }
 .card-title { font-size: 15px; font-weight: 700; color: #1f2b38; margin: 0 0 16px; }
+.card-head { display: flex; align-items: center; justify-content: space-between;
+             gap: 12px; margin-bottom: 6px; }
+.card-head .card-title { margin: 0; }
+.mb { margin-bottom: 18px; }
+.cols { display: grid; grid-template-columns: 400px 1fr; gap: 16px; align-items: start; }
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 12.5px; color: #7b8794; margin-bottom: 6px; }
 .field select, .field input { width: 100%; height: 40px; padding: 0 12px; font-size: 14px;
@@ -38,15 +42,26 @@ const css = `
   border: none; border-radius: 6px; cursor: pointer; }
 .btn-write:hover { background: #b52b24; }
 .btn-write:disabled { opacity: 0.7; cursor: default; }
+.btn-ghost { background: #fff; color: #2e7fb5; border: 1px solid #bcd6e6;
+             border-radius: 6px; padding: 6px 12px; font-size: 12.5px;
+             font-weight: 600; cursor: pointer; }
+.btn-ghost:hover { background: #f0f6fa; }
+.btn-all { background: #e4692a; color: #fff; border: none; border-radius: 8px;
+           padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
+           white-space: nowrap; }
+.btn-all:hover { background: #cf5c20; }
+.btn-all:disabled { opacity: 0.7; cursor: default; }
 .hint { margin: 14px 0 0; padding: 11px 13px; font-size: 12.5px; line-height: 1.5;
         color: #7b8794; background: #f6f7f8; border: 1px solid #e8ebed; border-radius: 8px; }
 .table { width: 100%; border-collapse: collapse; }
 .table th { background: #f5f7f8; text-align: left; padding: 12px 14px;
-            font-size: 13px; font-weight: 700; color: #344054; }
+            font-size: 13px; font-weight: 700; color: #344054; white-space: nowrap; }
 .table td { padding: 13px 14px; border-top: 1px solid #eef0f3;
-            font-size: 13.5px; color: #4b5563; }
-.name { font-weight: 600; color: #1f2b38; }
+            font-size: 13.5px; color: #4b5563; vertical-align: middle; }
+.table .name { font-weight: 600; color: #1f2b38; }
 .qty { font-weight: 700; color: #1f2b38; }
+.expiry { color: #d0342c; font-weight: 600; }
+.overdue { color: #d0342c; font-weight: 600; white-space: nowrap; }
 .chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 3px 9px;
         border-radius: 999px; background: #eef1f5; color: #5a6675; }
 .chip-expiry { background: #fbe9e8; color: #d0342c; }
@@ -54,6 +69,7 @@ const css = `
 .msg { padding: 11px 13px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
 .msg-ok { background: #e9f7ef; color: #2f9e63; border: 1px solid #bfe8cf; }
 .msg-err { background: #fdeaea; color: #d0342c; border: 1px solid #f6c9c7; }
+.msg-inline { margin: 10px 0 0; }
 `;
 
 // "2026-10-08" -> "08.10"
@@ -85,6 +101,26 @@ function reasonLabel(value: string | null): string {
   return found ? found.label : (value ?? "");
 }
 
+// Склонение: «1 день», «2 дня», «5 дней»
+function daysWord(n: number): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (last === 1 && abs !== 11) return "день";
+  if (last >= 2 && last <= 4 && (abs < 12 || abs > 14)) return "дня";
+  return "дней";
+}
+
+// Одна строка карточки «К списанию»: продукт + все его просроченные партии
+type ExpiredGroup = {
+  productId: number;
+  productName: string;
+  unit: string;
+  quantity: number; // сумма по всем просроченным партиям продукта
+  deliveries: string[]; // номера поставок
+  dates: string[]; // сроки годности партий
+  daysOverdue: number; // на сколько просрочено (берём самое большое)
+};
+
 // Раздел «Списание» — повар списывает испорченное и просроченное
 export default function WriteOffPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -96,9 +132,17 @@ export default function WriteOffPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // Состояние кнопки «Списать всё просроченное»
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkOk, setBulkOk] = useState("");
+  const [bulkErr, setBulkErr] = useState("");
+
   const [productId, setProductId] = useState("");
   const [qtyText, setQtyText] = useState("");
   const [reason, setReason] = useState<WriteOffReason>("Expiry");
+
+  // Ссылка на карточку формы — после кнопки «Списать» в строке к ней скроллим
+  const formRef = useRef<HTMLDivElement>(null);
 
   // Грузим всё разом: справочник, остатки, партии и историю
   const load = async () => {
@@ -123,10 +167,33 @@ export default function WriteOffPage() {
     load();
   }, []);
 
-  // Счётчики: getDashboard повару недоступен (403) — считаем сами
-  const expiredQty = stock
-    .filter((s) => s.status === "Просрочен")
-    .reduce((sum, s) => sum + s.quantity, 0);
+  // Просроченные партии: daysLeft < 0 — срок уже вышел
+  const expiredBatches = batches.filter((b) => b.daysLeft < 0);
+
+  // Группируем по продукту: продукт в таблице один раз, количество — сумма
+  const expiredGroups: ExpiredGroup[] = [];
+  for (const b of expiredBatches) {
+    const g = expiredGroups.find((x) => x.productId === b.productId);
+    if (g) {
+      g.quantity += b.quantity;
+      g.deliveries.push(b.deliveryNumber);
+      g.dates.push(b.expiryDate);
+      g.daysOverdue = Math.max(g.daysOverdue, -b.daysLeft);
+    } else {
+      expiredGroups.push({
+        productId: b.productId,
+        productName: b.productName,
+        unit: products.find((p) => p.id === b.productId)?.unit ?? "",
+        quantity: b.quantity,
+        deliveries: [b.deliveryNumber],
+        dates: [b.expiryDate],
+        daysOverdue: -b.daysLeft,
+      });
+    }
+  }
+
+  // Счётчик «Просрочено — ждёт списания» — по тем же данным, что и таблица
+  const expiredQty = expiredGroups.reduce((sum, g) => sum + g.quantity, 0);
   const soonCount = batches.filter((b) => b.daysLeft >= 0 && b.daysLeft <= 3).length;
 
   // Выбранный продукт и его партии по FEFO — по возрастанию срока
@@ -166,6 +233,40 @@ export default function WriteOffPage() {
     }
   };
 
+  // Кнопка «Списать» в строке: подставляем продукт, сумму и причину в форму
+  const fillForm = (g: ExpiredGroup) => {
+    setProductId(String(g.productId));
+    setQtyText(fmtQty(g.quantity)); // запятая — форма её принимает
+    setReason("Expiry");
+    setError("");
+    setSuccess("");
+    // Форма ниже — подскролливаем к ней, чтобы подстановка была видна
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  // «Списать всё просроченное»: идём по продуктам по очереди.
+  // Ошибка на одном не прерывает цикл — собираем и показываем одной строкой.
+  const writeOffAll = async () => {
+    setBulkBusy(true);
+    setBulkOk("");
+    setBulkErr("");
+    let done = 0;
+    const fails: string[] = [];
+    for (const g of expiredGroups) {
+      try {
+        await createWriteoff(g.productId, Number(g.quantity.toFixed(3)), "Expiry");
+        done += 1;
+      } catch (err) {
+        const e = err as { response?: { data?: { error?: string } }; message?: string };
+        fails.push(`${g.productName}: ${e.response?.data?.error ?? e.message ?? "ошибка"}`);
+      }
+    }
+    if (done > 0) setBulkOk(`Списано позиций: ${done}`);
+    if (fails.length > 0) setBulkErr(fails.join(" · "));
+    await load(); // пересчёт остатков, партий и истории
+    setBulkBusy(false);
+  };
+
   return (
     <div>
       <style>{css}</style>
@@ -193,9 +294,74 @@ export default function WriteOffPage() {
         </div>
       </div>
 
+      {/* Карточка «К списанию» — автоматически по просроченным партиям */}
+      <div className="card mb">
+        <div className="card-head">
+          <h2 className="card-title">К списанию</h2>
+          <button
+            className="btn-all"
+            onClick={writeOffAll}
+            disabled={bulkBusy || expiredGroups.length === 0}
+          >
+            {bulkBusy ? "Списываем…" : "Списать всё просроченное"}
+          </button>
+        </div>
+
+        {bulkOk && <div className="msg msg-ok msg-inline">{bulkOk}</div>}
+        {bulkErr && <div className="msg msg-err msg-inline">{bulkErr}</div>}
+
+        {loading ? (
+          <p className="empty">Загрузка…</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Продукт</th>
+                <th>Поставка</th>
+                <th>Количество</th>
+                <th>Срок</th>
+                <th>Просрочено на</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {expiredGroups.length === 0 && (
+                <tr>
+                  <td className="empty" colSpan={6}>
+                    Просроченных партий нет
+                  </td>
+                </tr>
+              )}
+              {expiredGroups.map((g) => (
+                <tr key={g.productId}>
+                  <td className="name">{g.productName}</td>
+                  <td>{g.deliveries.join(", ")}</td>
+                  <td className="qty">
+                    {fmtQty(g.quantity)} {g.unit}
+                  </td>
+                  <td className="expiry">{g.dates.map(fmtDate).join(", ")}</td>
+                  <td className="overdue">
+                    {g.daysOverdue} {daysWord(g.daysOverdue)}
+                  </td>
+                  <td>
+                    <button
+                      className="btn-ghost"
+                      onClick={() => fillForm(g)}
+                      disabled={bulkBusy}
+                    >
+                      Списать
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       <div className="cols">
         {/* Левая колонка — форма списания */}
-        <div className="card">
+        <div className="card" ref={formRef}>
           <h2 className="card-title">Новое списание</h2>
 
           {error && <div className="msg msg-err">{error}</div>}
