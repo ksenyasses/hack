@@ -86,7 +86,7 @@ export type DeliveryData = {
   items: { productId: number; quantity: number; expiryDate?: string }[];
 };
 
-// Ингредиент блюда (одна строка рецепта)
+// Ингредиент блюда (одная строка рецепта)
 export type RecipeItem = {
   productId: number;
   productName: string;
@@ -120,6 +120,34 @@ export type OrderResult = {
   id: number;
   createdAt: string;
   items: OrderItemInput[];
+};
+
+// Партия, из которой списаны продукты блюда (для журнала и проверки FEFO)
+export type OrderBatch = {
+  productId: number;
+  productName: string;
+  quantity: number;
+  deliveryNumber: string | null;
+  batchExpiry: string | null;
+};
+
+// Позиция заказа целиком: блюдо, количество и готовность
+export type OrderItemFull = {
+  dishId: number;
+  dishName: string;
+  quantity: number;
+  status: "New" | "Ready";
+  batches: OrderBatch[];
+};
+
+// Заказ целиком — формат GET /api/orders
+export type OrderFull = {
+  id: number;
+  createdAt: string;
+  tableNumber: string | null;
+  serveMode: "AllAtOnce" | "AsReady";
+  status: "New" | "Cancelled";
+  items: OrderItemFull[];
 };
 
 // Четыре счётчика на дашборде
@@ -654,6 +682,14 @@ export async function getOrders(): Promise<OrderResult[]> {
   return res.data;
 }
 
+// Заказы целиком — для раздела «Мои заказы» официанта.
+// В заглушке отдаём данные кухни: №12 (одно блюдо готово) и №11.
+export async function getOrdersFull(): Promise<OrderFull[]> {
+  if (USE_MOCK) return [...mockKitchen];
+  const res = await api.get<OrderFull[]>("/orders");
+  return res.data;
+}
+
 // --- Дашборд и горячие предложения ---
 
 // Данные-заглушки дашборда (счётчики и три карточки)
@@ -871,3 +907,24 @@ export async function getMovements(f: MovementFilters = {}): Promise<Movement[]>
   const res = await api.get<Movement[]>(`/movements?${params.toString()}`);
   return res.data;
 }
+
+// --- Заказы кухни (для «Моих заказов» официанта) ---
+
+// Заглушка: два заказа — №12 (одно блюдо уже готово) и №11
+const mockKitchen: OrderFull[] = [
+  {
+    id: 12, createdAt: "2026-10-11T15:42:00Z", tableNumber: "5",
+    serveMode: "AsReady", status: "New",
+    items: [
+      { dishId: 1, dishName: "Цезарь", quantity: 5, status: "Ready", batches: [] },
+      { dishId: 2, dishName: "Куриный суп", quantity: 5, status: "New", batches: [] },
+    ],
+  },
+  {
+    id: 11, createdAt: "2026-10-11T14:10:00Z", tableNumber: null,
+    serveMode: "AllAtOnce", status: "New",
+    items: [
+      { dishId: 2, dishName: "Куриный суп", quantity: 15, status: "New", batches: [] },
+    ],
+  },
+];
