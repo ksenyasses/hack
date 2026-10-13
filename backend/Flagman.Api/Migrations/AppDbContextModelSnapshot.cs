@@ -88,6 +88,15 @@ namespace Flagman.Api.Migrations
                     b.Property<int>("CreatedByUserId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ServeMode")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TableNumber")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.ToTable("Orders");
@@ -108,6 +117,9 @@ namespace Flagman.Api.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");

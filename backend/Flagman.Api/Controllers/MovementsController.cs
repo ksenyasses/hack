@@ -25,7 +25,7 @@ public class MovementsController : ControllerBase
         [FromQuery] DateOnly? to = null)
     {
         if (limit <= 0 || limit > 500)
-            limit = 100;
+            limit = 500;
 
         var query = _db.StockMovements.AsQueryable();
 

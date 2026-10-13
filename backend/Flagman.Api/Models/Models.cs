@@ -15,7 +15,8 @@ public enum MovementType
 {
     Receipt,
     Order,
-    WriteOff
+    WriteOff,
+    Return         // возврат товара при отмене заказа
 }
 
 // Причины списания
@@ -25,6 +26,27 @@ public enum WriteOffReason
     Spoilage,
     Damage,
     Other
+}
+
+// Режим подачи заказа: всё одним заходом или каждое блюдо отдельно
+public enum ServeMode
+{
+    AllAtOnce,   // всё сразу
+    AsReady      // по мере готовности
+}
+
+// Статус заказа
+public enum OrderStatus
+{
+    New,
+    Cancelled
+}
+
+// Статус отдельного блюда в заказе — повар отмечает каждое своё
+public enum OrderItemStatus
+{
+    New,
+    Ready
 }
 
 // Сотрудник. Пароль храним только зашифрованным
@@ -97,6 +119,11 @@ public class Order
     public int Id { get; set; }
     public int CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // Стол гостей. Строка, а не число: бывает «VIP-2» и «бар 1»
+    public string? TableNumber { get; set; }
+    public ServeMode ServeMode { get; set; } = ServeMode.AllAtOnce;
+    public OrderStatus Status { get; set; } = OrderStatus.New;
 }
 
 // Строка заказа: какое блюдо и сколько порций
@@ -105,7 +132,8 @@ public class OrderItem
     public int Id { get; set; }
     public int OrderId { get; set; }
     public int DishId { get; set; }
-    public int Quantity { get; set; }
+    public int Quantity { get; set; }             // порции
+    public OrderItemStatus Status { get; set; } = OrderItemStatus.New;
 }
 
 // Журнал: каждое изменение количества товара

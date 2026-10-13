@@ -1,11 +1,11 @@
 using System.Security.Claims;
+using System.Globalization;
 using Flagman.Api.Data;
 using Flagman.Api.Models;
 using Flagman.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
-using System.Globalization;
 
 namespace Flagman.Api.Controllers;
 
@@ -19,7 +19,9 @@ public class OrdersController : ControllerBase
     public OrdersController(AppDbContext db) => _db = db;
 
     public record OrderItemRequest(int DishId, int Quantity);
-    public record OrderRequest(List<OrderItemRequest> Items);
+    public record OrderRequest(List<OrderItemRequest> Items,
+                               string? TableNumber = null,
+                               ServeMode ServeMode = ServeMode.AllAtOnce);
 
     // POST /api/orders — заказ из нескольких блюд
     [HttpPost]
@@ -31,6 +33,7 @@ public class OrdersController : ControllerBase
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var userId = GetUserId();
+        var ci = CultureInfo.GetCultureInfo("ru-RU");
         var orderItems = new List<OrderItem>();
         var needed = new Dictionary<int, decimal>();
 
@@ -61,9 +64,7 @@ public class OrdersController : ControllerBase
             orderItems.Add(new OrderItem { DishId = dish.Id, Quantity = item.Quantity });
         }
 
-         // 2. Проверяем наличие ДО любых изменений — чтобы отказать понятно
-        var ci = CultureInfo.GetCultureInfo("ru-RU");
-
+        // 2. Проверяем наличие ДО любых изменений — чтобы отказать понятно
         foreach (var (productId, required) in needed)
         {
             var available = await _db.ProductBatches
@@ -83,7 +84,13 @@ public class OrdersController : ControllerBase
         // 3. Пишем всё одной транзакцией: заказ, строки, списания
         await using var tx = await _db.Database.BeginTransactionAsync();
 
-        var order = new Order { CreatedByUserId = userId, CreatedAt = DateTime.UtcNow };
+        var order = new Order
+        {
+            CreatedByUserId = userId,
+            CreatedAt = DateTime.UtcNow,
+            TableNumber = request.TableNumber,
+            ServeMode = request.ServeMode
+        };
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
 
@@ -113,7 +120,15 @@ public class OrdersController : ControllerBase
         {
             order.Id,
             order.CreatedAt,
-            items = orderItems.Select(i => new { i.DishId, i.Quantity })
+            order.TableNumber,
+            serveMode = order.ServeMode.ToString(),
+            status = order.Status.ToString(),
+            items = orderItems.Select(i => new
+            {
+                i.DishId,
+                i.Quantity,
+                status = i.Status.ToString()
+            })
         });
     }
 
@@ -132,10 +147,12 @@ public class OrdersController : ControllerBase
                 {
                     i.DishId,
                     dishName = _db.Dishes.Where(d => d.Id == i.DishId).Select(d => d.Name).FirstOrDefault(),
-                    i.Quantity
+                    i.Quantity,
+                    status = i.Status.ToString()
                 })
                 .ToListAsync();
 
+            // Движения по заказу — со сроком партии и номером поставки
             var movements = await _db.StockMovements
                 .Where(m => m.OrderId == order.Id)
                 .Select(m => new
@@ -143,14 +160,141 @@ public class OrdersController : ControllerBase
                     m.ProductId,
                     productName = _db.Products.Where(p => p.Id == m.ProductId).Select(p => p.Name).FirstOrDefault(),
                     m.BatchId,
+                    deliveryNumber = _db.ProductBatches
+                        .Where(b => b.Id == m.BatchId)
+                        .Select(b => _db.Deliveries.Where(d => d.Id == b.DeliveryId)
+                            .Select(d => d.Number).FirstOrDefault())
+                        .FirstOrDefault(),
+                    batchExpiry = _db.ProductBatches
+                        .Where(b => b.Id == m.BatchId)
+                        .Select(b => (DateOnly?)b.ExpiryDate).FirstOrDefault(),
                     m.QuantityDelta
                 })
                 .ToListAsync();
 
-            result.Add(new { order.Id, order.CreatedAt, items, movements });
+            // У каждой позиции — свои партии. Один продукт мог уйти из нескольких,
+            // поэтому группируем движения по паре «продукт + партия»
+            var recipeProducts = await _db.RecipeItems
+                .Select(r => r.DishId)
+                .Distinct()
+                .ToListAsync();
+            _ = recipeProducts;
+
+            var perDish = new List<object>();
+
+            foreach (var i in items)
+            {
+                var recipe = await _db.RecipeItems
+                    .Where(r => r.DishId == i.DishId)
+                    .Select(r => r.ProductId)
+                    .ToListAsync();
+
+                var batches = (from prodId in recipe
+                               join mv in movements on prodId equals mv.ProductId
+                               group mv by new { mv.ProductId, mv.BatchId } into g
+                               select new
+                               {
+                                   productId = g.Key.ProductId,
+                                   productName = g.First().productName,
+                                   quantity = Math.Abs(g.Sum(x => x.QuantityDelta)),
+                                   deliveryNumber = g.First().deliveryNumber,
+                                   batchExpiry = g.First().batchExpiry
+                               }).ToList();
+
+                perDish.Add(new
+                {
+                    i.DishId,
+                    i.dishName,
+                    i.Quantity,
+                    i.status,
+                    batches
+                });
+            }
+
+            result.Add(new
+            {
+                order.Id,
+                order.CreatedAt,
+                order.TableNumber,
+                serveMode = order.ServeMode.ToString(),
+                status = order.Status.ToString(),
+                items = perDish,
+                movements
+            });
         }
 
         return Ok(result);
+    }
+
+    // PUT /api/orders/{orderId}/items/{dishId}/ready — повар отметил блюдо готовым
+    [HttpPut("{orderId}/items/{dishId}/ready")]
+    [Authorize(Roles = "Cook,Manager")]
+    public async Task<ActionResult> MarkItemReady(int orderId, int dishId)
+    {
+        var order = await _db.Orders.FindAsync(orderId);
+        if (order is null)
+            return NotFound(new { error = "Заказ не найден" });
+        if (order.Status == OrderStatus.Cancelled)
+            return BadRequest(new { error = "Заказ отменён" });
+
+        // Ищем позицию по блюду, а не по id строки: фронт знает только dishId
+        var item = await _db.OrderItems
+            .FirstOrDefaultAsync(i => i.OrderId == orderId && i.DishId == dishId);
+        if (item is null)
+            return NotFound(new { error = "Блюдо в этом заказе не найдено" });
+
+        item.Status = OrderItemStatus.Ready;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { item.Id, item.DishId, status = item.Status.ToString() });
+    }
+
+    // POST /api/orders/{id}/cancel — отмена заказа с возвратом товара на склад
+    [HttpPost("{id}/cancel")]
+    [Authorize(Roles = "Waiter,Manager")]
+    public async Task<ActionResult> Cancel(int id)
+    {
+        var order = await _db.Orders.FindAsync(id);
+        if (order is null)
+            return NotFound(new { error = "Заказ не найден" });
+        if (order.Status == OrderStatus.Cancelled)
+            return BadRequest(new { error = "Заказ уже отменён" });
+
+        var items = await _db.OrderItems.Where(i => i.OrderId == id).ToListAsync();
+        if (items.Any(i => i.Status == OrderItemStatus.Ready))
+            return BadRequest(new { error = "Заказ уже начали готовить — отменить нельзя" });
+
+        var movements = await _db.StockMovements.Where(m => m.OrderId == id).ToListAsync();
+        if (movements.Count == 0)
+            return BadRequest(new { error = "По заказу нет списаний — нечего возвращать" });
+
+        var userId = GetUserId();
+
+        // Возвращаем количество в те же партии, откуда оно ушло
+        foreach (var m in movements)
+        {
+            var back = await _db.ProductBatches.FirstOrDefaultAsync(b => b.Id == m.BatchId);
+            if (back is null) continue;
+
+            back.Quantity += Math.Abs(m.QuantityDelta);
+
+            _db.StockMovements.Add(new StockMovement
+            {
+                ProductId = m.ProductId,
+                BatchId = m.BatchId,
+                QuantityDelta = Math.Abs(m.QuantityDelta),
+                Type = MovementType.Return,
+                Reason = null,
+                OrderId = id,
+                UserId = userId,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        order.Status = OrderStatus.Cancelled;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { order.Id, status = order.Status.ToString(), returned = movements.Count });
     }
 
     private int GetUserId()

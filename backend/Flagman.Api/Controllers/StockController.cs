@@ -54,12 +54,18 @@ public class StockController : ControllerBase
         return Ok(items);
     }
 
-    // GET /api/batches — остатки по партиям, ближайшие к истечению сверху
+    // GET /api/batches?includeEmpty=true — остатки по партиям, ближайшие к истечению сверху.
+    // По умолчанию только партии с остатком; с includeEmpty=true отдаём и закрытые —
+    // так на экране видно, что партия выработана.
     [HttpGet("api/batches")]
-    public async Task<ActionResult> GetBatches()
+    public async Task<ActionResult> GetBatches([FromQuery] bool includeEmpty = false)
     {
-        var rows = await _db.ProductBatches
-            .Where(b => b.Quantity > 0)
+        var query = _db.ProductBatches.AsQueryable();
+
+        if (!includeEmpty)
+            query = query.Where(b => b.Quantity > 0);
+
+        var rows = await query
             .OrderBy(b => b.ExpiryDate)
             .Select(b => new
             {
