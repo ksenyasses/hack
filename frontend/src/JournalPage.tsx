@@ -27,6 +27,8 @@ const css = `
 .chip-receipt { background: #e9f7ef; color: #2f9e63; }
 .chip-order { background: #e8f1f8; color: #2e7fb5; }
 .chip-writeoff { background: #fbe9e8; color: #d0342c; }
+.chip-return { background: #e8f1f8; color: #2e7fb5; }
+.comment { font-size: 12px; color: #7b8794; margin-top: 3px; }
 .muted { color: #7b8794; }
 .date { color: #4b5563; }
 .expiry { color: #d0342c; font-weight: 600; }
@@ -41,11 +43,13 @@ const TYPE_LABELS: Record<MovementType, string> = {
   Receipt: "Приёмка",
   Order: "Продажа",
   WriteOff: "Списание",
+  Return: "Возврат",
 };
 
 function typeChip(t: string): string {
   if (t === "Receipt") return "chip chip-receipt";
   if (t === "Order") return "chip chip-order";
+  if (t === "Return") return "chip chip-return";
   return "chip chip-writeoff";
 }
 
@@ -154,6 +158,7 @@ export default function JournalPage() {
             <option value="Receipt">Приёмка</option>
             <option value="Order">Продажа</option>
             <option value="WriteOff">Списание</option>
+            <option value="Return">Возврат</option>
           </select>
         </div>
 
@@ -244,7 +249,11 @@ export default function JournalPage() {
                     {fmtDate(m.batchExpiry)}
                   </td>
                   <td>{m.userName}</td>
-                  <td className="muted">{commentOf(m)}</td>
+                  <td className="muted">
+                    {commentOf(m)}
+                    {/* Текст из поля comment — серым мелким под основной подписью */}
+                    {m.comment && <div className="comment">{m.comment}</div>}
+                  </td>
                 </tr>
               ))}
             </tbody>

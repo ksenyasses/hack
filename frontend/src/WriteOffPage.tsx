@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  getProducts, getStock, getBatches, createWriteoff, getWriteoffHistory,
-  WRITE_OFF_REASONS,
+  getProducts, getStock, getBatches, createWriteoffRequest,
+  getWriteoffRequests, WRITE_OFF_REASONS,
 } from "./api";
 import type {
-  Product, StockItem, BatchItem, Movement, WriteOffReason,
+  Product, StockItem, BatchItem, WriteOffReason, WriteOffRequestItem,
 } from "./api";
 
 // Стили — по макету design/повар списание.html + карточка «К списанию»
@@ -32,15 +32,16 @@ const css = `
 .cols { display: grid; grid-template-columns: 400px 1fr; gap: 16px; align-items: start; }
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 12.5px; color: #7b8794; margin-bottom: 6px; }
-.field select, .field input { width: 100%; height: 40px; padding: 0 12px; font-size: 14px;
-  color: #1f2b38; background: #fff; border: 1px solid #d6dbdf;
-  border-radius: 6px; outline: none; }
-.field input:focus, .field select:focus { border-color: #2e7fb5;
+.field select, .field input, .field textarea { width: 100%; height: 40px; padding: 0 12px;
+  font-size: 14px; color: #1f2b38; background: #fff; border: 1px solid #d6dbdf;
+  border-radius: 6px; outline: none; font-family: inherit; }
+.field textarea { height: 70px; padding: 10px 12px; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: #2e7fb5;
   box-shadow: 0 0 0 2px rgba(46,127,181,0.15); }
-.btn-write { width: 100%; height: 44px; margin-top: 4px; font-size: 15px;
-  font-weight: 700; color: #fff; background: #d0342c;
+.btn-write { width: 100%; height: 44px; margin-top: 4px; font-size: 14px;
+  font-weight: 700; color: #fff; background: #e4692a;
   border: none; border-radius: 6px; cursor: pointer; }
-.btn-write:hover { background: #b52b24; }
+.btn-write:hover:not(:disabled) { background: #cf5c20; }
 .btn-write:disabled { opacity: 0.7; cursor: default; }
 .btn-ghost { background: #fff; color: #2e7fb5; border: 1px solid #bcd6e6;
              border-radius: 6px; padding: 6px 12px; font-size: 12.5px;
@@ -65,10 +66,17 @@ const css = `
 .chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 3px 9px;
         border-radius: 999px; background: #eef1f5; color: #5a6675; }
 .chip-expiry { background: #fbe9e8; color: #d0342c; }
+.comment { font-size: 12px; color: #7b8794; margin-top: 3px; }
+.st { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 3px 9px;
+      border-radius: 999px; white-space: nowrap; }
+.st-pending { background: #fdf1dd; color: #a5701f; }
+.st-ok { background: #e9f7ef; color: #2f9e63; }
+.st-rej { background: #eef1f5; color: #5a6675; }
 .empty { color: #7b8794; font-size: 13.5px; padding: 8px 0 2px; }
 .msg { padding: 11px 13px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
 .msg-ok { background: #e9f7ef; color: #2f9e63; border: 1px solid #bfe8cf; }
 .msg-err { background: #fdeaea; color: #d0342c; border: 1px solid #f6c9c7; }
+.msg-info { background: #e8f1f8; color: #2e7fb5; border: 1px solid #bcd6e6; }
 .msg-inline { margin: 10px 0 0; }
 `;
 
@@ -101,6 +109,19 @@ function reasonLabel(value: string | null): string {
   return found ? found.label : (value ?? "");
 }
 
+// Плашка состояния заявки
+function statusChip(status: string): string {
+  if (status === "Pending") return "st st-pending";
+  if (status === "Approved") return "st st-ok";
+  return "st st-rej";
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  Pending: "Ожидает",
+  Approved: "Подтверждена",
+  Rejected: "Отклонена",
+};
+
 // Склонение: «1 день», «2 дня», «5 дней»
 function daysWord(n: number): string {
   const abs = Math.abs(n) % 100;
@@ -121,18 +142,18 @@ type ExpiredGroup = {
   daysOverdue: number; // на сколько просрочено (берём самое большое)
 };
 
-// Раздел «Списание» — повар списывает испорченное и просроченное
+// Раздел «Списание» — повар отправляет заявки, товар списывается после подтверждения
 export default function WriteOffPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stock, setStock] = useState<StockItem[]>([]);
   const [batches, setBatches] = useState<BatchItem[]>([]);
-  const [history, setHistory] = useState<Movement[]>([]);
+  const [requests, setRequests] = useState<WriteOffRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Состояние кнопки «Списать всё просроченное»
+  // Состояние кнопки «Отправить всё на подтверждение»
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkOk, setBulkOk] = useState("");
   const [bulkErr, setBulkErr] = useState("");
@@ -140,21 +161,23 @@ export default function WriteOffPage() {
   const [productId, setProductId] = useState("");
   const [qtyText, setQtyText] = useState("");
   const [reason, setReason] = useState<WriteOffReason>("Expiry");
+  // Текст для причины «Другое» — обязателен, когда причина выбрана
+  const [comment, setComment] = useState("");
 
   // Ссылка на карточку формы — после кнопки «Списать» в строке к ней скроллим
   const formRef = useRef<HTMLDivElement>(null);
 
-  // Грузим всё разом: справочник, остатки, партии и историю
+  // Грузим всё разом: справочник, остатки, партии и свои заявки
   const load = async () => {
     setLoading(true);
     try {
-      const [p, s, b, h] = await Promise.all([
-        getProducts(), getStock(), getBatches(), getWriteoffHistory(50),
+      const [p, s, b, r] = await Promise.all([
+        getProducts(), getStock(), getBatches(), getWriteoffRequests(),
       ]);
       setProducts(p);
       setStock(s);
       setBatches(b);
-      setHistory(h);
+      setRequests(r);
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } }; message?: string };
       setError(e.response?.data?.error ?? e.message ?? "Не удалось загрузить данные");
@@ -204,6 +227,7 @@ export default function WriteOffPage() {
     .filter((b) => b.productId === selectedId)
     .sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
 
+  // Отправить заявку повара (товар пока НЕ списывается)
   const submit = async () => {
     setError("");
     setSuccess("");
@@ -218,16 +242,27 @@ export default function WriteOffPage() {
       setError("Количество должно быть больше нуля");
       return;
     }
+    // У причины «Другое» обязателен текст — иначе заявка бессмысленна
+    if (reason === "Other" && !comment.trim()) {
+      setError("Для причины „Другое“ напишите, что случилось");
+      return;
+    }
 
     setSending(true);
     try {
-      await createWriteoff(selectedId, Number(q.toFixed(3)), reason);
-      setSuccess("Списано");
+      await createWriteoffRequest(
+        selectedId,
+        Number(q.toFixed(3)),
+        reason,
+        comment.trim() || null
+      );
+      setSuccess("Заявка отправлена управляющему");
       setQtyText("");
-      await load(); // обновляем остатки и историю
+      setComment("");
+      await load(); // обновляем заявки
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } }; message?: string };
-      setError(e.response?.data?.error ?? e.message ?? "Не удалось списать");
+      setError(e.response?.data?.error ?? e.message ?? "Не удалось отправить заявку");
     } finally {
       setSending(false);
     }
@@ -238,13 +273,14 @@ export default function WriteOffPage() {
     setProductId(String(g.productId));
     setQtyText(fmtQty(g.quantity)); // запятая — форма её принимает
     setReason("Expiry");
+    setComment("");
     setError("");
     setSuccess("");
     // Форма ниже — подскролливаем к ней, чтобы подстановка была видна
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
-  // «Списать всё просроченное»: идём по продуктам по очереди.
+  // «Отправить всё на подтверждение»: идём по продуктам по очереди.
   // Ошибка на одном не прерывает цикл — собираем и показываем одной строкой.
   const writeOffAll = async () => {
     setBulkBusy(true);
@@ -254,16 +290,16 @@ export default function WriteOffPage() {
     const fails: string[] = [];
     for (const g of expiredGroups) {
       try {
-        await createWriteoff(g.productId, Number(g.quantity.toFixed(3)), "Expiry");
+        await createWriteoffRequest(g.productId, Number(g.quantity.toFixed(3)), "Expiry", null);
         done += 1;
       } catch (err) {
         const e = err as { response?: { data?: { error?: string } }; message?: string };
         fails.push(`${g.productName}: ${e.response?.data?.error ?? e.message ?? "ошибка"}`);
       }
     }
-    if (done > 0) setBulkOk(`Списано позиций: ${done}`);
+    if (done > 0) setBulkOk(`Заявок отправлено: ${done}`);
     if (fails.length > 0) setBulkErr(fails.join(" · "));
-    await load(); // пересчёт остатков, партий и истории
+    await load(); // пересчёт заявок
     setBulkBusy(false);
   };
 
@@ -273,8 +309,8 @@ export default function WriteOffPage() {
 
       <h1 className="page-title">Списание</h1>
       <p className="page-sub">
-        Списываем испорченное и просроченное. Партии выбираются автоматически
-        по FEFO: сначала та, у которой срок ближе всего, просроченная уходит первой.
+        Списываем испорченное и просроченное. Заявка уходит управляющему —
+        товар спишется только после его подтверждения. Партии сервер выбирает по FEFO.
       </p>
 
       <div className="kpi-row">
@@ -303,11 +339,11 @@ export default function WriteOffPage() {
             onClick={writeOffAll}
             disabled={bulkBusy || expiredGroups.length === 0}
           >
-            {bulkBusy ? "Списываем…" : "Списать всё просроченное"}
+            {bulkBusy ? "Отправляем…" : "Отправить всё на подтверждение"}
           </button>
         </div>
 
-        {bulkOk && <div className="msg msg-ok msg-inline">{bulkOk}</div>}
+        {bulkOk && <div className="msg msg-info msg-inline">{bulkOk}</div>}
         {bulkErr && <div className="msg msg-err msg-inline">{bulkErr}</div>}
 
         {loading ? (
@@ -360,12 +396,12 @@ export default function WriteOffPage() {
       </div>
 
       <div className="cols">
-        {/* Левая колонка — форма списания */}
+        {/* Левая колонка — форма заявки на списание */}
         <div className="card" ref={formRef}>
           <h2 className="card-title">Новое списание</h2>
 
           {error && <div className="msg msg-err">{error}</div>}
-          {success && <div className="msg msg-ok">{success}</div>}
+          {success && <div className="msg msg-info">{success}</div>}
 
           <div className="field">
             <label>Продукт</label>
@@ -404,8 +440,20 @@ export default function WriteOffPage() {
             </select>
           </div>
 
+          {/* Для причины «Другое» — обязательное поле с описанием */}
+          {reason === "Other" && (
+            <div className="field">
+              <label>Что случилось</label>
+              <textarea
+                placeholder="Опишите, почему продукт списывается"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+              />
+            </div>
+          )}
+
           <button className="btn-write" onClick={submit} disabled={loading || sending}>
-            {sending ? "Списываем…" : "Списать"}
+            {sending ? "Отправляем…" : "Отправить на подтверждение"}
           </button>
 
           {selected && (
@@ -418,9 +466,9 @@ export default function WriteOffPage() {
           )}
         </div>
 
-        {/* Правая колонка — история списаний */}
+        {/* Правая колонка — свои заявки */}
         <div className="card">
-          <h2 className="card-title">Последние списания</h2>
+          <h2 className="card-title">Мои заявки</h2>
 
           {loading ? (
             <p className="empty">Загрузка…</p>
@@ -432,25 +480,34 @@ export default function WriteOffPage() {
                   <th>Продукт</th>
                   <th>Количество</th>
                   <th>Причина</th>
+                  <th>Состояние</th>
                 </tr>
               </thead>
               <tbody>
-                {history.length === 0 && (
+                {requests.length === 0 && (
                   <tr>
-                    <td className="empty" colSpan={4}>
-                      Списаний пока нет
+                    <td className="empty" colSpan={5}>
+                      Заявок пока нет
                     </td>
                   </tr>
                 )}
-                {history.map((m) => (
-                  <tr key={m.id}>
-                    <td>{fmtWhen(m.createdAt)}</td>
-                    <td className="name">{m.productName}</td>
-                    {/* В журнале количество отрицательное — показываем модуль */}
-                    <td className="qty">{fmtQty(Math.abs(m.quantityDelta))}</td>
+                {requests.map((r) => (
+                  <tr key={r.id}>
+                    <td>{fmtWhen(r.createdAt)}</td>
+                    <td className="name">{r.productName}</td>
+                    <td className="qty">
+                      {fmtQty(r.quantity)} {r.unit}
+                    </td>
                     <td>
-                      <span className={m.reason === "Expiry" ? "chip chip-expiry" : "chip"}>
-                        {reasonLabel(m.reason)}
+                      <span className={r.reason === "Expiry" ? "chip chip-expiry" : "chip"}>
+                        {reasonLabel(r.reason)}
+                      </span>
+                      {/* Текст «Что случилось» — мелким серым под причиной */}
+                      {r.comment && <div className="comment">{r.comment}</div>}
+                    </td>
+                    <td>
+                      <span className={statusChip(r.status)}>
+                        {STATUS_LABELS[r.status] ?? r.status}
                       </span>
                     </td>
                   </tr>
@@ -460,7 +517,7 @@ export default function WriteOffPage() {
           )}
 
           <p className="empty">
-            Показаны последние операции. Полный журнал — в разделе «Журнал».
+            Статус меняет управляющий. Товар спишется только после подтверждения.
           </p>
         </div>
       </div>

@@ -140,12 +140,15 @@ export type OrderItemFull = {
   batches: OrderBatch[];
 };
 
+// Режим подачи заказа
+export type ServeMode = "AllAtOnce" | "AsReady";
+
 // Заказ целиком — формат GET /api/orders
 export type OrderFull = {
   id: number;
   createdAt: string;
   tableNumber: string | null;
-  serveMode: "AllAtOnce" | "AsReady";
+  serveMode: ServeMode;
   status: "New" | "Cancelled";
   items: OrderItemFull[];
 };
@@ -261,11 +264,12 @@ export type Movement = {
   quantityDelta: number;
   type: string;
   reason: string | null;
+  comment: string | null;
   orderId: number | null;
 };
 
-// Тип операции в журнале
-export type MovementType = "Receipt" | "Order" | "WriteOff";
+// Тип операции в журнале (Return — возврат поставщику/от поставщика)
+export type MovementType = "Receipt" | "Order" | "WriteOff" | "Return";
 
 // Фильтры журнала: type/productId/from/to уходят на сервер.
 // productName — только для заглушки: в реальном ответе productId нет,
@@ -308,6 +312,22 @@ export type ForecastData = {
   periodDays: number;
   atRisk: number;
   dishes: ForecastRow[];
+};
+
+// Заявка повара на списание — строка GET /writeoff-requests
+export type WriteOffRequestItem = {
+  id: number;
+  productId: number;
+  productName: string;
+  unit: string;
+  quantity: number;
+  reason: WriteOffReason;
+  comment: string | null;
+  status: "Pending" | "Approved" | "Rejected";
+  createdBy: string;
+  createdAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
 };
 
 // Дата через N дней от сегодня в формате YYYY-MM-DD (для заглушки)
@@ -646,8 +666,13 @@ export async function updateDish(id: number, data: DishData): Promise<Dish> {
 // Номер следующего заказа
 let mockOrderId = 1;
 
-// Оформить заказ: проверяет остатки и списывает продукты со склада
-export async function createOrder(items: OrderItemInput[]): Promise<OrderResult> {
+// Оформить заказ: проверяет остатки и списывает продукты со склада.
+// tableNumber и serveMode уходят на сервер — по ним кухня показывает стол и режим.
+export async function createOrder(
+  items: OrderItemInput[],
+  tableNumber: string | null = null,
+  serveMode: ServeMode = "AllAtOnce"
+): Promise<OrderResult> {
   if (USE_MOCK) {
     if (items.length === 0) {
       throw new Error("Заказ пустой");
@@ -700,9 +725,29 @@ export async function createOrder(items: OrderItemInput[]): Promise<OrderResult>
       }
     }
 
-    return { id: mockOrderId++, createdAt: new Date().toISOString(), items };
+    // Кладём заказ и в «кухню» — иначе «Кухня» и «Мои заказы» его не увидят
+    const created: OrderFull = {
+      id: mockOrderId++,
+      createdAt: new Date().toISOString(),
+      tableNumber,
+      serveMode,
+      status: "New",
+      items: items.map((it) => {
+        const dish = mockDishes.find((d) => d.id === it.dishId);
+        return {
+          dishId: it.dishId,
+          dishName: dish ? dish.name : "?",
+          quantity: it.quantity,
+          status: "New" as const,
+          batches: [],
+        };
+      }),
+    };
+    mockKitchen.unshift(created);
+
+    return { id: created.id, createdAt: created.createdAt, items };
   }
-  const res = await api.post<OrderResult>("/orders", { items });
+  const res = await api.post<OrderResult>("/orders", { items, tableNumber, serveMode });
   return res.data;
 }
 
@@ -837,26 +882,27 @@ const mockWriteoffs: Movement[] = [
   {
     id: 3, createdAt: "2026-10-10T15:20:00Z", productName: "Помидор",
     userName: "Повар", batchId: 20, batchExpiry: "2026-10-08",
-    quantityDelta: -6.37, type: "WriteOff", reason: "Expiry", orderId: null,
+    quantityDelta: -6.37, type: "WriteOff", reason: "Expiry", comment: null, orderId: null,
   },
   {
     id: 2, createdAt: "2026-10-10T11:05:00Z", productName: "Масло",
     userName: "Повар", batchId: 13, batchExpiry: "2026-10-11",
-    quantityDelta: -1.11, type: "WriteOff", reason: "Spoilage", orderId: null,
+    quantityDelta: -1.11, type: "WriteOff", reason: "Spoilage", comment: null, orderId: null,
   },
   {
     id: 1, createdAt: "2026-10-09T18:40:00Z", productName: "Курица",
     userName: "Повар", batchId: 15, batchExpiry: "2026-10-11",
-    quantityDelta: -0.9, type: "WriteOff", reason: "Damage", orderId: null,
+    quantityDelta: -0.9, type: "WriteOff", reason: "Damage", comment: null, orderId: null,
   },
 ];
 
-// Списать продукт: POST /api/writeoffs. Партии выбирает сервер по FEFO,
-// фронт только отправляет productId, quantity и причину.
+// Прямое списание: POST /api/writeoffs — ТОЛЬКО для управляющего.
+// Партии выбирает сервер по FEFO, фронт отправляет productId, quantity, причину и текст.
 export async function createWriteoff(
   productId: number,
   quantity: number,
-  reason: WriteOffReason
+  reason: WriteOffReason,
+  comment: string | null = null
 ): Promise<{ message: string; productId: number; quantity: number; reason: string }> {
   if (USE_MOCK) {
     const s = mockStockData.find((x) => x.id === productId);
@@ -865,16 +911,24 @@ export async function createWriteoff(
     }
     // Уменьшаем остаток и добавляем запись в историю
     s.quantity = Number((s.quantity - quantity).toFixed(3));
+    if (s.quantity <= 0) {
+      s.quantity = 0;
+      s.status = "Закончился";
+      s.nearestExpiry = null;
+      s.daysLeft = null;
+    }
+    s.belowMinStock = s.quantity < s.minStock;
     mockWriteoffs.unshift({
       id: Date.now(),
       createdAt: new Date().toISOString(),
       productName: s.name,
-      userName: "Повар",
+      userName: "Управляющий",
       batchId: null,
       batchExpiry: null,
       quantityDelta: -quantity,
       type: "WriteOff",
       reason,
+      comment,
       orderId: null,
     });
     return { message: "Списано", productId, quantity, reason };
@@ -882,7 +936,7 @@ export async function createWriteoff(
   try {
     const res = await api.post<{ message: string; productId: number; quantity: number; reason: string }>(
       "/writeoffs",
-      { productId, quantity, reason }
+      { productId, quantity, reason, comment }
     );
     return res.data;
   } catch (e: unknown) {
@@ -901,28 +955,34 @@ export async function getWriteoffHistory(limit = 50): Promise<Movement[]> {
 
 // --- Журнал операций ---
 
-// Заглушка журнала: приёмка и продажи + всё из истории списаний.
+// Заглушка журнала: приёмка, продажи, списания и возврат.
 // id новые идут с 4 — чтобы не задеть id 1..3 из mockWriteoffs (иначе дубль ключа в React)
 const mockMovements: Movement[] = [
   {
+    id: 8, createdAt: "2026-10-13T09:10:00Z", productName: "Масло",
+    userName: "Управляющий", batchId: 13, batchExpiry: "2026-10-11",
+    quantityDelta: 0.5, type: "Return", reason: null,
+    comment: "Возврат от поставщика, банки целые", orderId: null,
+  },
+  {
     id: 7, createdAt: "2026-10-10T14:22:00Z", productName: "Курица",
     userName: "Повар", batchId: 15, batchExpiry: "2026-10-11",
-    quantityDelta: 3, type: "Receipt", reason: null, orderId: null,
+    quantityDelta: 3, type: "Receipt", reason: null, comment: null, orderId: null,
   },
   {
     id: 6, createdAt: "2026-10-10T14:35:00Z", productName: "Курица",
     userName: "Официант", batchId: 15, batchExpiry: "2026-10-11",
-    quantityDelta: -0.75, type: "Order", reason: null, orderId: 1,
+    quantityDelta: -0.75, type: "Order", reason: null, comment: null, orderId: 1,
   },
   {
     id: 5, createdAt: "2026-10-10T15:10:00Z", productName: "Курица",
     userName: "Официант", batchId: 19, batchExpiry: "2026-10-13",
-    quantityDelta: -0.15, type: "Order", reason: null, orderId: 1,
+    quantityDelta: -0.15, type: "Order", reason: null, comment: null, orderId: 1,
   },
   {
     id: 4, createdAt: "2026-10-10T15:40:00Z", productName: "Помидор",
     userName: "Повар", batchId: 20, batchExpiry: "2026-10-08",
-    quantityDelta: -0.3, type: "WriteOff", reason: "Expiry", orderId: null,
+    quantityDelta: -0.3, type: "WriteOff", reason: "Expiry", comment: null, orderId: null,
   },
   ...mockWriteoffs,
 ];
@@ -952,6 +1012,145 @@ export async function getMovements(f: MovementFilters = {}): Promise<Movement[]>
   params.set("limit", String(f.limit ?? 100));
   const res = await api.get<Movement[]>(`/movements?${params.toString()}`);
   return res.data;
+}
+
+// --- Заявки на списание (повар отправляет, управляющий решает) ---
+
+// Заглушка: две заявки ждут решения, одна уже подтверждена
+const mockRequests: WriteOffRequestItem[] = [
+  {
+    id: 3, productId: 2, productName: "Помидор", unit: "кг", quantity: 1.5,
+    reason: "Expiry", comment: null, status: "Pending",
+    createdBy: "Повар", createdAt: "2026-10-13T09:40:00Z",
+    decidedBy: null, decidedAt: null,
+  },
+  {
+    id: 2, productId: 3, productName: "Масло", unit: "л", quantity: 0.5,
+    reason: "Other", comment: "Банка вскрылась, стоит на жаре", status: "Pending",
+    createdBy: "Повар", createdAt: "2026-10-13T08:15:00Z",
+    decidedBy: null, decidedAt: null,
+  },
+  {
+    id: 1, productId: 1, productName: "Курица", unit: "кг", quantity: 0.9,
+    reason: "Spoilage", comment: null, status: "Approved",
+    createdBy: "Повар", createdAt: "2026-10-12T14:00:00Z",
+    decidedBy: "Управляющий", decidedAt: "2026-10-12T14:20:00Z",
+  },
+];
+
+// Отправить заявку: POST /api/writeoff-requests. Склад НЕ меняется — это только заявка.
+export async function createWriteoffRequest(
+  productId: number,
+  quantity: number,
+  reason: WriteOffReason,
+  comment: string | null
+): Promise<{ id: number; status: string; createdAt: string }> {
+  if (USE_MOCK) {
+    const p = mockProducts.find((x) => x.id === productId);
+    const created: WriteOffRequestItem = {
+      id: Date.now(),
+      productId,
+      productName: p?.name ?? "",
+      unit: p?.unit ?? "",
+      quantity,
+      reason,
+      comment,
+      status: "Pending",
+      createdBy: "Повар",
+      createdAt: new Date().toISOString(),
+      decidedBy: null,
+      decidedAt: null,
+    };
+    mockRequests.unshift(created);
+    return { id: created.id, status: created.status, createdAt: created.createdAt };
+  }
+  try {
+    const res = await api.post<{ id: number; status: string; createdAt: string }>(
+      "/writeoff-requests",
+      { productId, quantity, reason, comment }
+    );
+    return res.data;
+  } catch (e: unknown) {
+    // Ошибки бэкенда приходят как { "error": "текст" }
+    const err = e as { response?: { data?: { error?: string } }; message?: string };
+    throw new Error(err.response?.data?.error ?? err.message ?? "Не удалось отправить заявку");
+  }
+}
+
+// Список заявок — GET /api/writeoff-requests
+export async function getWriteoffRequests(): Promise<WriteOffRequestItem[]> {
+  if (USE_MOCK) return [...mockRequests];
+  try {
+    const res = await api.get<WriteOffRequestItem[]>("/writeoff-requests");
+    return res.data;
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { error?: string } }; message?: string };
+    throw new Error(err.response?.data?.error ?? err.message ?? "Не удалось загрузить заявки");
+  }
+}
+
+// Подтвердить заявку — только управляющему. На заглушке подтверждение
+// реально списывает товар и пишет историю — ровно то, что делает сервер.
+export async function approveWriteoffRequest(id: number): Promise<void> {
+  if (USE_MOCK) {
+    const r = mockRequests.find((x) => x.id === id);
+    if (r && r.status === "Pending") {
+      r.status = "Approved";
+      r.decidedBy = "Управляющий";
+      r.decidedAt = new Date().toISOString();
+
+      const s = mockStockData.find((x) => x.id === r.productId);
+      if (s && s.quantity >= r.quantity) {
+        s.quantity = Number((s.quantity - r.quantity).toFixed(3));
+        if (s.quantity <= 0) {
+          s.quantity = 0;
+          s.status = "Закончился";
+          s.nearestExpiry = null;
+          s.daysLeft = null;
+        }
+        s.belowMinStock = s.quantity < s.minStock;
+        mockWriteoffs.unshift({
+          id: Date.now(),
+          createdAt: new Date().toISOString(),
+          productName: r.productName,
+          userName: r.createdBy,
+          batchId: null,
+          batchExpiry: null,
+          quantityDelta: -r.quantity,
+          type: "WriteOff",
+          reason: r.reason,
+          comment: r.comment,
+          orderId: null,
+        });
+      }
+    }
+    return;
+  }
+  try {
+    await api.post(`/writeoff-requests/${id}/approve`);
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { error?: string } }; message?: string };
+    throw new Error(err.response?.data?.error ?? err.message ?? "Не удалось подтвердить заявку");
+  }
+}
+
+// Отклонить заявку — только управляющему
+export async function rejectWriteoffRequest(id: number): Promise<void> {
+  if (USE_MOCK) {
+    const r = mockRequests.find((x) => x.id === id);
+    if (r && r.status === "Pending") {
+      r.status = "Rejected";
+      r.decidedBy = "Управляющий";
+      r.decidedAt = new Date().toISOString();
+    }
+    return;
+  }
+  try {
+    await api.post(`/writeoff-requests/${id}/reject`);
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { error?: string } }; message?: string };
+    throw new Error(err.response?.data?.error ?? err.message ?? "Не удалось отклонить заявку");
+  }
 }
 
 // --- Заказы кухни (для «Моих заказов» официанта и «Кухни» повара) ---
