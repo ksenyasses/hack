@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
 import { getDishes, getProducts, createOrder } from "./api";
-import type { Dish, Product } from "./api";
+import type { Dish, Product, ServeMode } from "./api";
 
 // Стили — по макету design/официант новая продажа.jpg
 // (структура из ТЗ: слева блюда, справа корзина)
 const css = `
 .page-title { margin: 0 0 20px; font-size: 28px; font-weight: 800; color: #344054; }
+.order-meta { display: flex; gap: 16px; margin: 0 0 16px; }
+.order-meta .field { display: flex; flex-direction: column; gap: 5px; }
+.order-meta label { font-size: 12px; color: #7b8794; }
+.order-meta input, .order-meta select {
+  height: 38px; padding: 0 10px; font-size: 13.5px; color: #1f2b38;
+  background: #fff; border: 1px solid #d6dbdf; border-radius: 6px; outline: none; }
+.order-meta input:focus, .order-meta select:focus {
+  border-color: #2e7fb5; box-shadow: 0 0 0 2px rgba(46,127,181,0.15); }
 .columns { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; align-items: start; }
 .panel { background: #fff; border: 1px solid #e5e8ec; border-radius: 12px;
          padding: 24px; }
@@ -67,6 +75,10 @@ export default function NewOrderPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [sending, setSending] = useState(false);
+
+  // Стол и режим подачи — уходят на сервер вместе с заказом
+  const [table, setTable] = useState("");
+  const [serveMode, setServeMode] = useState<ServeMode>("AllAtOnce");
 
   // Загрузка блюд и продуктов (продукты — для единиц измерения в составе)
   const load = async () => {
@@ -151,10 +163,14 @@ export default function NewOrderPage() {
         dishId: row.dishId,
         quantity: Number(row.quantity),
       }));
-      const result = await createOrder(items);
-      // Успех: зелёное сообщение, корзина пустая, блюда перезагружаем
-      setSuccess(`Заказ №${result.id} оформлен`);
+      // Стол пустой → уйдёт null, кухня покажет «Без стола»
+      const result = await createOrder(items, table.trim() || null, serveMode);
+      // Успех: синее сообщение, корзина и стол пустые, блюда перезагружаем
+      setSuccess(
+        `Заказ №${result.id} оформлен${table.trim() ? ` — стол ${table.trim()}` : ""}`
+      );
       setCart([]);
+      setTable("");
       await load();
     } catch (err) {
       // Нехватка и прочие ошибки сервера — красным, заказ НЕ оформился
@@ -179,6 +195,29 @@ export default function NewOrderPage() {
     <div>
       <style>{css}</style>
       <h1 className="page-title">Новый заказ</h1>
+
+      {/* Стол и режим подачи — над двумя колонками */}
+      <div className="order-meta">
+        <div className="field">
+          <label>Стол</label>
+          <input
+            type="text"
+            placeholder="5, VIP-2, бар 1"
+            value={table}
+            onChange={(e) => setTable(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label>Как подавать</label>
+          <select
+            value={serveMode}
+            onChange={(e) => setServeMode(e.target.value as ServeMode)}
+          >
+            <option value="AllAtOnce">Всё сразу</option>
+            <option value="AsReady">По мере готовности</option>
+          </select>
+        </div>
+      </div>
 
       <div className="columns">
         {/* Левая колонка — список блюд с доступностью */}
