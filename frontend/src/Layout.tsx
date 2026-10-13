@@ -12,7 +12,7 @@ const css = `
 .layout { min-height: 100vh; display: flex; flex-direction: column; background: #f5f6f8; }
 .topbar { height: 64px; background: #2c3d4f; display: flex; align-items: center;
           justify-content: space-between; padding: 0 24px; }
-.brand { color: #fff; font-size: 21px; font-weight: 800; letter-spacing: 2px; }
+.brand { color: #fff; font-size: 15px; font-weight: 800; letter-spacing: 1.5px; white-space: nowrap; }
 .topbar-right { display: flex; align-items: center; gap: 16px; }
 .user { color: #d5dde6; font-size: 14px; }
 .logout { background: #47566b; color: #fff; border: none; border-radius: 6px;
@@ -50,7 +50,7 @@ export default function Layout({
     <div className="layout">
       <style>{css}</style>
       <header className="topbar">
-        <div className="brand">FLAGMAN</div>
+        <div className="brand">KITCHEN OPERATIONS</div>
         <div className="topbar-right">
           <span className="user">{fullName} • {role}</span>
           <button className="logout" onClick={onLogout}>Выйти</button>

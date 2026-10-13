@@ -7,8 +7,8 @@ const css = `
 .page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #e9edf0; }
 .card { width: 400px; background: #fff; border: 1px solid #e2e6e9; border-radius: 8px;
         padding: 36px 40px 32px; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
-.brand { margin: 0; text-align: center; font-size: 30px; font-weight: 800; letter-spacing: 2px; color: #2c4a63; }
-.brand-sub { margin: 6px 0 28px; text-align: center; font-size: 12px; letter-spacing: 1px; color: #93a1ad; }
+.brand { margin: 0; text-align: center; font-size: 24px; font-weight: 800; letter-spacing: 1.5px; color: #2c4a63; }
+.brand-sub { font-size: 14px; color: #55606e; margin: 6px 0 0; letter-spacing: 0.3px; text-align: center; }
 .label { display: block; margin: 0 0 6px; font-size: 13px; color: #7c8896; }
 .input { width: 100%; height: 42px; margin-bottom: 16px; padding: 0 14px; font-size: 15px;
          color: #2b3440; border: 1px solid #d6dbdf; border-radius: 6px; outline: none; }
@@ -54,8 +54,8 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
     <div className="page">
       <style>{css}</style>
       <div className="card">
-        <h1 className="brand">FLAGMAN</h1>
-        <p className="brand-sub">система автоматизации ресторана</p>
+        <h1 className="brand">KITCHEN OPERATIONS</h1>
+        <p className="brand-sub">Система учёта продуктов ресторана</p>
         <form onSubmit={handleSubmit}>
           <label className="label" htmlFor="login">Логин</label>
           <input
