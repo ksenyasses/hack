@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
   getProducts, getStock, getBatches, createWriteoffRequest,
-  getWriteoffRequests, WRITE_OFF_REASONS,
+  getWriteoffRequests, WRITE_OFF_REASONS, confirmAction,
 } from "./api";
 import type {
   Product, StockItem, BatchItem, WriteOffReason, WriteOffRequestItem,
 } from "./api";
+import ComboBox from "./ComboBox";
+import { fmtQty } from "./format";
 
 // Стили — по макету design/повар списание.html + карточка «К списанию»
 const css = `
@@ -85,11 +87,6 @@ function fmtDate(iso: string | null): string {
   if (!iso) return "—";
   const [, m, d] = iso.slice(0, 10).split("-");
   return `${d}.${m}`;
-}
-
-// 6.37 -> "6,370"
-function fmtQty(q: number): string {
-  return q.toFixed(3).replace(".", ",");
 }
 
 // "сегодня, 15:20" или "09.10, 18:40"
@@ -220,9 +217,19 @@ export default function WriteOffPage() {
   const soonCount = batches.filter((b) => b.daysLeft >= 0 && b.daysLeft <= 3).length;
 
   // Выбранный продукт и его партии по FEFO — по возрастанию срока
+  // Поиск по продуктам: по названию и по единице измерения.
+  // В подсказках показываем ещё и остаток — сразу видно, что и сколько можно списать.
+  const productOptions = products.map((p) => {
+    const st = stock.find((s) => s.id === p.id);
+    return {
+      value: String(p.id),
+      label: p.name,
+      hint: st ? `${p.unit} · ${fmtQty(st.quantity)} на складе` : p.unit,
+    };
+  });
+
   const selectedId = Number(productId);
-  const selected = products.find((p) => p.id === selectedId);
-  const selectedStock = stock.find((s) => s.id === selectedId);
+  const selected = products.find((p) => p.id === selectedId);  const selectedStock = stock.find((s) => s.id === selectedId);
   const fefo = batches
     .filter((b) => b.productId === selectedId)
     .sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
@@ -245,6 +252,15 @@ export default function WriteOffPage() {
     // У причины «Другое» обязателен текст — иначе заявка бессмысленна
     if (reason === "Other" && !comment.trim()) {
       setError("Для причины „Другое“ напишите, что случилось");
+      return;
+    }
+
+    // Списание необратимо — но теперь только после подтверждения управляющим,
+    // поэтому спрашиваем один раз, чтобы не отправить заявку пр��сто так
+    if (!confirmAction(
+      "Отправить заявку на списание?\n" +
+      "Списание произойдёт только после подтверждения управляющим."
+    )) {
       return;
     }
 
@@ -315,14 +331,14 @@ export default function WriteOffPage() {
 
       <div className="kpi-row">
         <div className="kpi">
-          <span className="badge b-red">!</span>
+          <span className="badge b-red" aria-hidden="true" />
           <div>
             <div className="val">{fmtQty(expiredQty)}</div>
             <div className="lbl">Просрочено — ждёт списания</div>
           </div>
         </div>
         <div className="kpi">
-          <span className="badge b-amber">{soonCount}</span>
+          <span className="badge b-amber" aria-hidden="true" />
           <div>
             <div className="val">{soonCount} партий</div>
             <div className="lbl">Скоро истекают — до 3 дней</div>
@@ -405,14 +421,12 @@ export default function WriteOffPage() {
 
           <div className="field">
             <label>Продукт</label>
-            <select value={productId} onChange={(e) => setProductId(e.target.value)}>
-              <option value="">— выберите —</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.unit})
-                </option>
-              ))}
-            </select>
+            <ComboBox
+              options={productOptions}
+              value={productId}
+              onChange={setProductId}
+              placeholder="Начните вводить название"
+            />
           </div>
 
           <div className="field">

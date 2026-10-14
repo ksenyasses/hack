@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { getProducts, createDelivery } from "./api";
 import type { Product, DeliveryBatch } from "./api";
+import ComboBox from "./ComboBox";
+import { fmtQty, daysLeftText } from "./format";
 
 // Стили раздела — по макету design/повар приёмка.jpg
 const css = `
@@ -11,6 +13,12 @@ const css = `
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .field-label { font-size: 13px; color: #7c8896; }
 .hint { font-size: 12px; color: #9aa4af; font-style: italic; }
+/* Метка «с упаковки» — чтобы было видно, откуда берётся дата */
+.req {
+  margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 600; font-style: normal;
+  color: #b45309; background: #fef3c7;
+}
 .input, .select { height: 42px; padding: 0 14px; font-size: 15px; color: #2b3440;
                   border: 1px solid #d6dbdf; border-radius: 6px; outline: none;
                   background: #fff; }
@@ -42,6 +50,7 @@ const css = `
 .table th { background: #f5f7f8; text-align: left; padding: 13px 16px;
             font-size: 14px; font-weight: 700; color: #344054; }
 .table td { padding: 15px 16px; border-top: 1px solid #eef0f3; font-size: 15px; color: #4b5563; }
+.overdue { color: #b42318; font-weight: 700; }
 .status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .section-title { margin: 0 0 12px; font-size: 18px; font-weight: 700; color: #344054; }
@@ -118,6 +127,13 @@ export default function DeliveryPage() {
     setRows(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   };
 
+  // Подсказки поля продукта — тот же набор для каждой строки приёмки
+  const productOptions = products.map((p) => ({
+    value: String(p.id),
+    label: p.name,
+    hint: p.unit,
+  }));
+
   // Сброс формы
   const reset = () => {
     setNumber("");
@@ -130,6 +146,26 @@ export default function DeliveryPage() {
     e.preventDefault();
     setError("");
     setSuccess("");
+
+    // Срок годности обязателен в каждой строке: он берётся с упаковки,
+    // а не высчитывается по справочнику — иначе партия молча уедет
+    // с чужим сроком и вовремя не попадёт ни в стоп-лист, ни в горячие.
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r.productId) {
+        setError(`Строка ${i + 1}: выберите продукт`);
+        return;
+      }
+      if (!r.quantity.trim() || Number(r.quantity) <= 0) {
+        setError(`Строка ${i + 1}: укажите количество`);
+        return;
+      }
+      if (!r.expiryDate) {
+        setError(`Строка ${i + 1}: укажите срок годности с упаковки`);
+        return;
+      }
+    }
+
     setSending(true);
     try {
       const delivery = await createDelivery({
@@ -138,7 +174,7 @@ export default function DeliveryPage() {
         items: rows.map((r) => ({
           productId: Number(r.productId),
           quantity: Number(r.quantity),
-          expiryDate: r.expiryDate || undefined, // пусто — срок посчитается сам
+          expiryDate: r.expiryDate,
         })),
       });
       setSuccess(`Поставка ${delivery.number} оформлена`);
@@ -181,7 +217,7 @@ export default function DeliveryPage() {
           <span style={{ flex: 2 }}>Продукт</span>
           <span style={{ flex: 1 }}>Количество</span>
           <span className="row-date">
-            Срок годности <span className="hint">— если не заполнить, срок посчитается автоматически</span>
+            Срок годности <span className="req">с упаковки</span>
           </span>
           <span />
         </div>
@@ -191,18 +227,12 @@ export default function DeliveryPage() {
         ) : (
           rows.map((row, index) => (
             <div className="row" key={index}>
-              <select
-                className="select"
+              <ComboBox
+                options={productOptions}
                 value={row.productId}
-                onChange={(e) => updateRow(index, { productId: e.target.value })}
-              >
-                <option value="">— выберите продукт —</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.unit})
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => updateRow(index, { productId: v })}
+                placeholder="Начните вводить название"
+              />
               <input
                 className="input"
                 type="number"
@@ -263,9 +293,11 @@ export default function DeliveryPage() {
               {batches.map((b) => (
                 <tr key={b.id}>
                   <td>{b.productName}</td>
-                  <td>{b.quantity}</td>
+                  <td>{fmtQty(b.quantity)}</td>
                   <td>{formatDate(b.expiryDate)}</td>
-                  <td>{b.daysLeft}</td>
+                  <td className={b.daysLeft < 0 ? "overdue" : undefined}>
+                    {daysLeftText(b.daysLeft)}
+                  </td>
                   <td>
                     <StatusBadge status={b.status} />
                   </td>

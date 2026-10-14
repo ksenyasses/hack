@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import {
-  getProducts, getWriteoffRequests, approveWriteoffRequest,
-  rejectWriteoffRequest, createWriteoff, WRITE_OFF_REASONS,
+  getProducts, getStock, getWriteoffRequests, approveWriteoffRequest,
+  rejectWriteoffRequest, createWriteoff, WRITE_OFF_REASONS, confirmAction,
 } from "./api";
-import type { Product, WriteOffReason, WriteOffRequestItem } from "./api";
+import type { Product, StockItem, WriteOffReason, WriteOffRequestItem } from "./api";
+import ComboBox from "./ComboBox";
+import { fmtQty } from "./format";
 
 // Стили — в палитре остальных страниц
 const css = `
@@ -57,11 +59,6 @@ const css = `
 .msg-err { background: #fdeaea; color: #d0342c; border: 1px solid #f6c9c7; }
 `;
 
-// 6.37 -> "6,370"
-function fmtQty(q: number): string {
-  return q.toFixed(3).replace(".", ",");
-}
-
 // "2026-10-13T09:40:00Z" -> "сегодня, 12:40"
 function fmtWhen(iso: string): string {
   const d = new Date(iso);
@@ -96,6 +93,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function WriteOffReviewPage() {
   const [requests, setRequests] = useState<WriteOffRequestItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stock, setStock] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // id заявки, по которой прямо сейчас жмут кнопку
@@ -126,6 +124,7 @@ export default function WriteOffReviewPage() {
   useEffect(() => {
     load();
     getProducts().then(setProducts).catch(() => {});
+    getStock().then(setStock).catch(() => {});
   }, []);
 
   // Ожидающие сверху, внутри — свежие первыми
@@ -135,8 +134,24 @@ export default function WriteOffReviewPage() {
     return b.createdAt.localeCompare(a.createdAt);
   });
 
+  // Подсказки поля продукта: название, а справа серым — единица и остаток
+  const productOptions = products.map((p) => {
+    const st = stock.find((s) => s.id === p.id);
+    return {
+      value: String(p.id),
+      label: p.name,
+      hint: st ? `${p.unit} · ${fmtQty(st.quantity)} на складе` : p.unit,
+    };
+  });
+
   // Подтвердить: товар спишется на сервере, перечитываем заявки и справочник
   const approve = async (id: number) => {
+    const request = requests.find((r) => r.id === id);
+    const what = request ? `${request.productName} ${fmtQty(request.quantity)} ${request.unit}` : "заявку";
+    // Подтверждение списания — необратимо: товар уходит со склада по FEFO
+    if (!confirmAction(`Подтвердить списание?\n${what} уйдёт со склада по FEFO.`)) {
+      return;
+    }
     setBusyId(id);
     setError("");
     try {
@@ -153,6 +168,11 @@ export default function WriteOffReviewPage() {
 
   // Отклонить: товар остаётся на складе
   const reject = async (id: number) => {
+    const request = requests.find((r) => r.id === id);
+    const what = request ? request.productName : "заявку";
+    if (!confirmAction(`Отклонить заявку?\n${what} останется на складе.`)) {
+      return;
+    }
     setBusyId(id);
     setError("");
     try {
@@ -296,14 +316,12 @@ export default function WriteOffReviewPage() {
         <div className="form">
           <div className="f">
             <label>Продукт</label>
-            <select value={productId} onChange={(e) => setProductId(e.target.value)}>
-              <option value="">— выберите —</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.unit})
-                </option>
-              ))}
-            </select>
+            <ComboBox
+              options={productOptions}
+              value={productId}
+              onChange={setProductId}
+              placeholder="Начните вводить название"
+            />
           </div>
 
           <div className="f">

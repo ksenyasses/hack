@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { getDishes, getProducts, createDish, updateDish } from "./api";
+import SearchBox from "./SearchBox";
 import type { Dish, Product } from "./api";
 
 // Стили раздела — по макету design/управляющий блюда и рецепты.jpg
@@ -66,6 +67,7 @@ const emptyRow: Row = { productId: "", quantity: "" };
 // Раздел «Блюда»: карточки блюд с рецептурой и форма создания/правки
 export default function DishesPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
+  const [query, setQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -99,6 +101,14 @@ export default function DishesPage() {
   useEffect(() => {
     load();
   }, []);
+
+  // Поиск по блюдам
+  const q = query.trim().toLowerCase();
+  const shownDishes = q
+    ? dishes.filter((d) =>
+        `${d.name} ${d.reason ?? ""}`.toLowerCase().split(q).length > 1
+      )
+    : dishes;
 
   // Открыть форму: создать новое или отредактировать существующее
   const openAdd = () => {
@@ -262,10 +272,20 @@ export default function DishesPage() {
 
       {!showForm && error && <p className="error">{error}</p>}
 
+      <SearchBox
+        value={query}
+        onChange={setQuery}
+        placeholder="Найти блюдо…"
+        found={shownDishes.length}
+        total={dishes.length}
+      />
+
       {loading ? (
         <p className="loading">Загрузка…</p>
+      ) : shownDishes.length === 0 ? (
+        <p className="empty">Ничего не найдено</p>
       ) : (
-        dishes.map((dish) => (
+        shownDishes.map((dish) => (
           <div className="card" key={dish.id}>
             <div className="card-head">
               <div>
