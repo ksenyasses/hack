@@ -124,6 +124,12 @@ public class HotOffersController : ControllerBase
 
             if (score <= 0) continue;
 
+            // Нельзя рекомендовать то, что сейчас не готовят.
+            // Блюдо может быть в стоп-листе из-за продукта, который не
+            // относится к «горячим» партиям, — например, он просто кончился.
+            var (cookablePortions, stopReason) = await AvailabilityService.Check(_db, dish.Id);
+            if (cookablePortions <= 0) continue;
+
             var isPromo = dish.PromoUntil != null && dish.PromoUntil >= today;
             offers.Add(new Offer(dish.Id, dish.Name, Math.Round(score, 1), coverPortions, reason, isPromo));
         }
