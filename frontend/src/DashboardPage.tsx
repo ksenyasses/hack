@@ -83,12 +83,24 @@ function daysWord(n: number): string {
   return `${n} ${word}`;
 }
 
-// Четыре счётчика сверху — данные и подписи держим одним списком
+// Русский падеж для «блюдо»: 1 блюдо, 2 блюда, 5 блюд
+function dishWord(n: number): string {
+  const abs = Math.abs(n);
+  const last = abs % 10;
+  const teens = abs % 100 >= 11 && abs % 100 <= 14;
+  if (last === 1 && !teens) return "блюдо";
+  if (last >= 2 && last <= 4 && !teens) return "блюда";
+  return "блюд";
+}
+
+// Четыре счётчика сверху — данные и подписи держим одним списком.
+// Иконки не задаём: их рисует theme.css как контурные SVG по классу цвета,
+// поэтому рядом с ними держать эмодзи не нужно.
 const KPI_LABELS = [
-  { icon: "📦", cls: "b-blue", label: "Продуктов", key: "products" as const },
-  { icon: "⚠️", cls: "b-red", label: "Просрочено", key: "expired" as const },
-  { icon: "☠️", cls: "b-amber", label: "В стоп-листе", key: "dishesInStopList" as const },
-  { icon: "⏳", cls: "b-orange", label: "Скоро истекает", key: "expiringSoon" as const },
+  { cls: "b-blue", label: "Продуктов", key: "products" as const },
+  { cls: "b-red", label: "Просрочено", key: "expired" as const },
+  { cls: "b-amber", label: "В стоп-листе", key: "dishesInStopList" as const },
+  { cls: "b-orange", label: "Скоро истекает", key: "expiringSoon" as const },
 ];
 
 // Раздел «Дашборд»: счётчики, горячие предложения и три карточки
@@ -134,7 +146,7 @@ export default function DashboardPage() {
   return (
     <div>
       <style>{css}</style>
-      <h1 className="page-title">Dashboard</h1>
+      <h1 className="page-title">Главная</h1>
 
       {loading && <p className="loading">Загрузка…</p>}
       {error && <p className="error">{error}</p>}
@@ -145,7 +157,7 @@ export default function DashboardPage() {
           <div className="kpis">
             {KPI_LABELS.map((k) => (
               <div className="kpi" key={k.key}>
-                <div className={`badge ${k.cls}`}>{k.icon}</div>
+                <div className={`badge ${k.cls}`} aria-hidden="true" />
                 <div>
                   <div className="val">{data.counters[k.key]}</div>
                   <div className="lbl">{k.label}</div>
@@ -160,7 +172,9 @@ export default function DashboardPage() {
               <div>
                 <div className="title">
                   <span className="flame">🔥</span> Горячие предложения
-                  <span className="hot-summary">{offers.length} блюда сегодня</span>
+                  <span className="hot-summary">
+                    {offers.length} {dishWord(offers.length)} сегодня
+                  </span>
                 </div>
                 <div className="tagline">
                   Готовим и предлагаем гостям блюда, в которые уходят продукты с истекающим

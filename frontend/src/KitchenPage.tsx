@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getOrdersFull, getDishes, markItemReady } from "./api";
 import type { Dish, OrderFull } from "./api";
+import { fmtQty } from "./format";
 
 // Стили — рабочий экран повара, палитра остальных страниц
 const css = `
@@ -13,6 +14,11 @@ const css = `
         padding: 18px 20px; margin-bottom: 16px; }
 .order-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .table-num { font-size: 26px; font-weight: 800; color: #1f2b38; line-height: 1; }
+/* Навынос выделяем: повар сразу видит, что это не заказ «в зал»,
+   а блюдо, которое надо упаковать с собой */
+.takeaway { font-size: 15px; font-weight: 800; color: #b45309; line-height: 1;
+            background: #fef3c7; border: 1px solid #f3ddb6;
+            border-radius: 999px; padding: 7px 14px; }
 .order-time { font-size: 13px; color: #7b8794; }
 .mode { font-size: 11.5px; font-weight: 600; padding: 4px 11px;
         border-radius: 999px; background: #eef1f5; color: #5a6675; }
@@ -77,11 +83,6 @@ function fmtDate(iso: string | null): string {
   return `${d}.${m}`;
 }
 
-// 6.37 -> "6,370"
-function fmtQty(q: number): string {
-  return q.toFixed(3).replace(".", ",");
-}
-
 // Раздел «Кухня» — рабочий экран повара
 export default function KitchenPage() {
   const [orders, setOrders] = useState<OrderFull[]>([]);
@@ -91,13 +92,30 @@ export default function KitchenPage() {
   // Раскрытая технологическая карта: ключ "заказ-блюдо"
   const [techCard, setTechCard] = useState<string | null>(null);
 
+  // Какие заказы повар уже видел — по ним и считаем, что новые.
+  // Храним в ref: это служебные данные, ререндер из-за них не нужен.
+  const seenIds = useRef<Set<number> | null>(null);
+  // Заказы, которые только что появились: им один раз добавляем мигание
+  const [freshIds, setFreshIds] = useState<Set<number>>(new Set());
+
   const load = async () => {
     try {
       const [o, d] = await Promise.all([getOrdersFull(), getDishes()]);
       // Отменённые прячем, свежие сверху — по убыванию id
-      setOrders(
-        o.filter((x) => x.status !== "Cancelled").sort((a, b) => b.id - a.id)
-      );
+      const visible = o.filter((x) => x.status !== "Cancelled").sort((a, b) => b.id - a.id);
+
+      // Первый раз показываем всё без мигания. Дальше мигают только те,
+      // кого раньше на экране не было: повар краем глаза замечает новый заказ.
+      const ids = new Set(visible.map((x) => x.id));
+      if (seenIds.current === null) {
+        seenIds.current = ids;
+      } else {
+        const fresh = new Set(visible.filter((x) => !seenIds.current!.has(x.id)).map((x) => x.id));
+        seenIds.current = ids;
+        if (fresh.size > 0) setFreshIds(fresh);
+      }
+
+      setOrders(visible);
       setDishes(d);
       setError("");
     } catch (err) {
@@ -165,12 +183,25 @@ export default function KitchenPage() {
       )}
 
       {orders.map((order) => (
-        <div className="card" key={order.id}>
+        <div
+          className={freshIds.has(order.id) ? "card flash-new" : "card"}
+          key={order.id}
+          onAnimationEnd={() =>
+            setFreshIds((prev) => {
+              const next = new Set(prev);
+              next.delete(order.id);
+              return next;
+            })
+          }
+        >
           <div className="order-head">
-            {/* Номер стола крупно; если стола нет — «Без стола» */}
-            <span className="table-num">
-              {order.tableNumber ? `Стол ${order.tableNumber}` : "Без стола"}
-            </span>
+            {/* Стол крупно. Если стола нет — заказ навынос: это не «нет
+                данных», повару сразу видно, что блюдо надо упаковать. */}
+            {order.tableNumber ? (
+              <span className="table-num">Стол {order.tableNumber}</span>
+            ) : (
+              <span className="takeaway">Навынос</span>
+            )}
             <span className="order-time">
               Заказ №{order.id} · {fmtWhen(order.createdAt)}
             </span>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getOrdersFull } from "./api";
+import { getOrdersFull, cancelOrder, confirmAction } from "./api";
 import type { OrderFull } from "./api";
 
 // Стили — карточки заказов в палитре остальных страниц
@@ -23,6 +23,11 @@ const css = `
 .status-new { color: #7b8794; font-weight: 600; }
 .empty { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px;
          padding: 26px 20px; color: #7b8794; font-size: 14px; text-align: center; }
+.btn-cancel { background: #fff; color: #d0342c; border: 1px solid #f0c3c0;
+              border-radius: 6px; padding: 7px 14px; margin-top: 14px;
+              font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.btn-cancel:hover:not(:disabled) { background: #fdeaea; }
+.btn-cancel:disabled { opacity: 0.5; cursor: default; }
 .loading { color: #7b8794; font-size: 16px; }
 .error { color: #d0342c; font-size: 14px; margin: 0 0 16px; }
 `;
@@ -76,6 +81,24 @@ export default function MyOrdersPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Отмена заказа: товар возвращается на склад, блюда уходят из стоп-листа.
+  // Пока хоть одно блюдо готово — отменять поздно, сервер это отклонит.
+  const handleCancel = async (id: number) => {
+    setError("");
+    if (!confirmAction(
+      "Отменить заказ?\nПродукты вернутся на склад, блюда снова станут доступны."
+    )) {
+      return;
+    }
+    try {
+      await cancelOrder(id);
+      await load();
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(e.response?.data?.error ?? e.message ?? "Не удалось отменить заказ");
+    }
+  };
+
   return (
     <div>
       <style>{css}</style>
@@ -89,14 +112,17 @@ export default function MyOrdersPage() {
         <div className="empty">Заказов пока нет</div>
       )}
 
-      {orders.map((order) => (
+      {orders.map((order) => {
+        // Отменять можно, пока ни одно блюдо не отмечено готовым
+        const canCancel = order.items.every((item) => item.status !== "Ready");
+        return (
         <div className="card" key={order.id}>
           <div className="order-head">
             <span className="order-num">Заказ №{order.id}</span>
             <span className="order-time">{fmtWhen(order.createdAt)}</span>
-            {order.tableNumber && (
-              <span className="order-table">Стол {order.tableNumber}</span>
-            )}
+            <span className="order-table">
+              {order.tableNumber ? `Стол ${order.tableNumber}` : "Навынос"}
+            </span>
           </div>
 
           <span className={order.serveMode === "AsReady" ? "mode mode-ready" : "mode"}>
@@ -114,8 +140,17 @@ export default function MyOrdersPage() {
               )}
             </div>
           ))}
+
+          <button
+            className="btn-cancel"
+            disabled={!canCancel}
+            onClick={() => handleCancel(order.id)}
+          >
+            {canCancel ? "Отменить заказ" : "Уже начали готовить"}
+          </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

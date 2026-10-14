@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getStock, getBatches } from "./api";
 import type { StockItem, BatchItem } from "./api";
+import { fmtQty, daysLeftText } from "./format";
 
 // Стили раздела — по макету design/повар склад.jpg
 const css = `
@@ -25,6 +26,8 @@ const css = `
 .table td { padding: 15px 16px; border-top: 1px solid #eef0f3; font-size: 15px; color: #4b5563; }
 .table tbody tr:hover td { background: #f8fafb; }
 .low { color: #d0342c; font-weight: 700; }
+/* Просрочка — это действие, а не число: выделяем словами, а не минусом */
+.overdue { color: #b42318; font-weight: 700; }
 .status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .empty { padding: 20px 16px; color: #8a94a0; }
@@ -146,10 +149,12 @@ export default function StockPage() {
                 <td>{s.name}</td>
                 <td>{s.unit}</td>
                 <td className={s.belowMinStock ? "low" : undefined}>
-                  {s.quantity}
+                  {fmtQty(s.quantity)}
                 </td>
                 <td>{formatDate(s.nearestExpiry)}</td>
-                <td>{s.daysLeft ?? "—"}</td>
+                <td className={s.daysLeft !== null && s.daysLeft < 0 ? "overdue" : undefined}>
+                  {daysLeftText(s.daysLeft)}
+                </td>
                 <td>
                   <StatusBadge status={s.status} />
                 </td>
@@ -180,9 +185,11 @@ export default function StockPage() {
             {batches.map((b) => (
               <tr key={b.id}>
                 <td>{b.productName}</td>
-                <td>{b.quantity}</td>
+                <td>{fmtQty(b.quantity)}</td>
                 <td>{formatDate(b.expiryDate)}</td>
-                <td>{b.daysLeft}</td>
+                <td className={b.daysLeft < 0 ? "overdue" : undefined}>
+                  {daysLeftText(b.daysLeft)}
+                </td>
                 <td>{b.deliveryNumber}</td>
               </tr>
             ))}

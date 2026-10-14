@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPurchaseSuggestions, getStopListForecast } from "./api";
 import type { ForecastData, ForecastRow, PurchaseSuggestion } from "./api";
+import { fmtQty, dayWord } from "./format";
 
 // Стили — в палитре остальных таблиц (StockPage / JournalPage)
 const css = `
@@ -48,11 +49,6 @@ const css = `
 .loading { color: #7b8794; font-size: 16px; margin: 0 0 12px; }
 .error { color: #d0342c; font-size: 14px; margin: 0 0 12px; }
 `;
-
-// 6.37 -> "6,370"
-function fmtQty(q: number): string {
-  return q.toFixed(3).replace(".", ",");
-}
 
 // Плашка статуса блюда в прогнозе
 function statusChip(status: string): string {
@@ -108,14 +104,14 @@ export default function ForecastPage() {
 
       <div className="kpi-row">
         <div className="kpi">
-          <span className="badge b-blue">🛒</span>
+          <span className="badge b-blue" aria-hidden="true" />
           <div>
             <div className="val">{purchase.length}</div>
             <div className="lbl">Продуктов докупить</div>
           </div>
         </div>
         <div className="kpi">
-          <span className="badge b-amber">⚠</span>
+          <span className="badge b-amber" aria-hidden="true" />
           <div>
             <div className="val">{atRisk}</div>
             <div className="lbl">Блюд под риском</div>
@@ -227,7 +223,7 @@ export default function ForecastPage() {
                     {row.daysLeft === null ? (
                       <span className="muted">нет продаж</span>
                     ) : (
-                      `${row.daysLeft} дн.`
+                      `${row.daysLeft} ${dayWord(row.daysLeft)}`
                     )}
                   </td>
                   <td>{row.limitingProduct ?? <span className="muted">—</span>}</td>

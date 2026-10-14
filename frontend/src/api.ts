@@ -83,7 +83,7 @@ export type Delivery = {
 export type DeliveryData = {
   number: string;
   comment?: string;
-  items: { productId: number; quantity: number; expiryDate?: string }[];
+  items: { productId: number; quantity: number; expiryDate: string }[];
 };
 
 // Ингредиент блюда (одна строка рецепта)
@@ -490,15 +490,15 @@ export async function createDelivery(data: DeliveryData): Promise<Delivery> {
         throw new Error("Продукт не найден — обновите страницу");
       }
 
-      // Главная фишка: если срок не указан — считаем = сегодня + срок хранения продукта
-      let expiryDate: string;
-      if (item.expiryDate) {
-        if (daysUntil(item.expiryDate) < 0) {
-          throw new Error("Указан уже прошедший срок годности");
-        }
-        expiryDate = item.expiryDate;
-      } else {
-        expiryDate = inDays(product.shelfLifeDays);
+      // Срок годности обязателен: он берётся с упаковки.
+      // Раньше при пустом поле считался по сроку хранения из справочника —
+      // теперь так нельзя, партия обязана иметь фактический срок.
+      const expiryDate = item.expiryDate;
+      if (!expiryDate) {
+        throw new Error(`Укажите срок годности для «${product.name}» — он написан на упаковке`);
+      }
+      if (daysUntil(expiryDate) < 0) {
+        throw new Error("Указан уже прошедший срок годности");
       }
 
       const daysLeft = daysUntil(expiryDate);
@@ -1215,4 +1215,23 @@ export async function getStopListForecast(days = 7): Promise<ForecastData> {
   if (USE_MOCK) return { ...mockForecast, periodDays: days };
   const res = await api.get<ForecastData>(`/forecast/stop-list?days=${days}`);
   return res.data;
+}
+
+// Вопрос пользователю перед необратимым действием.
+// Намеренно window.confirm, а не своё окно: работает везде,
+// не ломает вёрстку и не требует состояния.
+export function confirmAction(message: string): boolean {
+  return window.confirm(message);
+}
+
+// Отмена заказа — POST /api/orders/{id}/cancel.
+// Товар возвращается на склад, заказ получает статус Cancelled.
+// Отменить можно, пока ни одно блюдо не отмечено готовым — это проверяет сервер.
+export async function cancelOrder(id: number): Promise<void> {
+  if (USE_MOCK) return;
+  try {
+    await api.post(`/orders/${id}/cancel`);
+  } catch (e: any) {
+    throw new Error(e?.response?.data?.error ?? "Не удалось отменить заказ");
+  }
 }

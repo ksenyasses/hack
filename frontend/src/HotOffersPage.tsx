@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getHotOffers, setDishPromo } from "./api";
 import type { HotOffersData, HotOffer } from "./api";
+import { fmtQty } from "./format";
 
 // Стили — из карточки горячих предложений на дашборде (DashboardPage.tsx)
 const css = `
@@ -52,11 +53,6 @@ function dishesWord(n: number): string {
   if (last === 1 && abs !== 11) return "блюдо";
   if (last >= 2 && last <= 4 && (abs < 12 || abs > 14)) return "блюда";
   return "блюд";
-}
-
-// 6.37 -> "6,370"
-function fmtQty(q: number): string {
-  return q.toFixed(3).replace(".", ",");
 }
 
 // 22.5 -> "22,5"

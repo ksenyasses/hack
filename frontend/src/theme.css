@@ -1,0 +1,429 @@
+/* ==========================================================================
+   Общая тема. Подключается один раз в Layout.tsx.
+   Влияет только на вид: цвета, шрифты, рамки, тени, иконки.
+   Расположение элементов не меняется.
+
+   !important стоит намеренно: у каждой страницы свой <style> внутри
+   компонента, и без этого общий файл проигрывает каскад.
+   ========================================================================== */
+
+:root {
+  /* Акцент — бирюзовый, как в референсе */
+  --accent: #0f766e;
+  --accent-hover: #0c5f59;
+  --accent-soft: #e6f2f1;
+
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --border: #e7e9ec;
+  --divider: #eef0f2;
+  --thead: #fafbfc;
+  --text: #1b1f24;
+  --text-2: #4b5563;
+  --muted: #6b7280;
+  --faint: #9aa2ad;
+
+  --ok: #15803d;
+  --ok-bg: #e8f6ec;
+  --ok-bd: #bfe3cb;
+  --warn: #b45309;
+  --warn-bg: #fdf3e3;
+  --warn-bd: #f2ddb4;
+  --danger: #b91c1c;
+  --danger-bg: #fdecec;
+  --danger-bd: #f3c9c9;
+  --info: #1d4ed8;
+  --info-bg: #e8eeff;
+  --neutral-bg: #f0f1f3;
+  --neutral-bd: #dfe2e6;
+
+  --radius: 14px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-hover: 0 4px 14px rgba(16, 24, 40, 0.08);
+}
+
+/* --- Каркас --------------------------------------------------------------- */
+
+.layout { background: var(--bg) !important; }
+
+/* Шапка белая с волосяной линией — как в референсе */
+.topbar {
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--border);
+  height: 60px !important;
+}
+
+.brand {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.2px !important;
+  color: var(--text) !important;
+  white-space: nowrap;
+}
+
+.logout {
+  background: var(--neutral-bg) !important;
+  color: var(--text-2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  font-weight: 600 !important;
+}
+.logout:hover { background: #e6e8eb !important; }
+
+/* --- Сайдбар: белый, с иконками ------------------------------------------ */
+
+.sidebar {
+  background: var(--card) !important;
+  border-right: 1px solid var(--border);
+  padding: 18px 12px !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-item {
+  display: flex !important;
+  align-items: center;
+  gap: 11px;
+  color: var(--text-2) !important;
+  font-size: 14.5px !important;
+  font-weight: 500 !important;
+  padding: 10px 12px !important;
+  margin-bottom: 3px;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  text-align: left !important;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.nav-item:hover {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+}
+
+/* Активный пункт — залитая бирюзовая плашка с белым текстом */
+.nav-item.active {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.22);
+}
+
+.nav-icon { display: inline-flex; flex: 0 0 18px; }
+.nav-icon svg { width: 18px; height: 18px; }
+
+/* Название раздела прижимаем влево, счётчик уходит вправо */
+.nav-label { flex: 1; }
+
+.nav-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+
+.nav-badge-ok { background: var(--ok); }
+
+/* На активном пункте счётчик должен читаться на бирюзовом фоне */
+.nav-item.active .nav-badge {
+  background: #ffffff;
+  color: var(--accent);
+}
+.nav-item.active .nav-badge-ok {
+  background: #ffffff;
+  color: var(--ok);
+}
+
+/* --- Новый заказ на кухне: мигает бирюзовой заливкой ---------------------- */
+/* Заливку делаем отдельным слоем поверх карточки, а не её фоном:
+   фон карточки объявлен с !important и обычную анимацию перебивает. */
+
+/* Три быстрых вспышки, затем длинный плавный спад.
+   Последние 30% анимации уходят в ноль мягко, без обрыва. */
+@keyframes flash-new {
+  0%   { opacity: 0; }
+  6%   { opacity: 1; }
+  22%  { opacity: 0.25; }
+  38%  { opacity: 1; }
+  54%  { opacity: 0.25; }
+  70%  { opacity: 1; }
+  86%  { opacity: 0.35; }
+  100% { opacity: 0; }
+}
+
+.card.flash-new { position: relative; }
+
+.card.flash-new::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(15, 118, 110, 0.20);
+  border: 2px solid rgba(15, 118, 110, 0.45);
+  pointer-events: none;
+  /* forwards обязателен: без него последний кадр (opacity 0) не удерживается,
+     слой на мгновение возвращается в непрозрачность 1 и вспыхивает */
+  animation: flash-new 2400ms ease-in-out 1 forwards;
+}
+
+/* Кто вошёл — внизу меню */
+.sidebar-user {
+  margin-top: auto;
+  padding: 14px 12px 4px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-user .who { color: var(--text); font-size: 14px; font-weight: 600; }
+.sidebar-user .role { color: var(--muted); font-size: 12px; }
+
+.content { padding: 24px 28px !important; background: var(--bg); }
+
+/* Колонка с содержимым обязана уметь сжиматься. Иначе широкая таблица
+   распирает всю страницу и появляется горизонтальная прокрутка страницы. */
+.body { min-width: 0; }
+.content { min-width: 0; }
+.card, .panel { overflow-x: auto; }
+
+/* --- Типографика ---------------------------------------------------------- */
+
+body { font-variant-numeric: tabular-nums; }
+
+h1, h2, h3,
+.page-title, .card-title, .panel-title {
+  color: var(--text) !important;
+  letter-spacing: -0.15px;
+}
+
+.page-title { font-size: 21px !important; font-weight: 700 !important; }
+
+.page-sub, .meta, .tagline, .hot-reason, .empty, .empty-note,
+.hint, .note, .loading, .muted, .lbl {
+  color: var(--muted) !important;
+}
+
+.error, .warn { color: var(--danger) !important; }
+
+/* --- Карточки ------------------------------------------------------------- */
+
+.card, .panel, .kpi {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow) !important;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+
+.card:hover, .panel:hover {
+  box-shadow: var(--shadow-hover) !important;
+}
+
+/* Кружок под иконку в счётчике: тонированный, без жирной заливки */
+.kpi .badge, .kpi-badge {
+  width: 40px !important;
+  height: 40px !important;
+  flex: 0 0 40px !important;
+  border-radius: 10px !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 20px 20px !important;
+}
+
+/* ВАЖНО: .b-blue / .b-amber / .b-red / .b-orange рисуют иконку фоном.
+   Внутри такого бейджа не должно быть текста или эмодзи — иначе они
+   напечатаются поверх картинки и получится каша из двух иконок.
+   Нужна иконка — оставьте бейдж пустым, цвет задаёт класс. */
+.b-blue {
+  background-color: var(--info-bg) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d4ed8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7l9-4 9 4v10l-9 4-9-4z'/%3E%3Cpath d='M3 7l9 4 9-4'/%3E%3Cpath d='M12 11v10'/%3E%3C/svg%3E") !important;
+}
+.b-amber {
+  background-color: var(--warn-bg) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b45309' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4l9 16H3z'/%3E%3Cpath d='M12 10v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E") !important;
+}
+.b-red {
+  background-color: var(--danger-bg) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b91c1c' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") !important;
+}
+.b-orange {
+  background-color: var(--neutral-bg) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M6 6l12 12'/%3E%3C/svg%3E") !important;
+}
+
+.kpi .val, .val { color: var(--text) !important; font-weight: 700 !important; }
+.kpi .lbl, .lbl { color: var(--muted) !important; }
+
+/* --- Таблицы -------------------------------------------------------------- */
+
+table th {
+  background: var(--thead) !important;
+  color: var(--muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border) !important;
+  border-top: none !important;
+  white-space: nowrap;
+}
+
+table td {
+  border-top: 1px solid var(--divider) !important;
+  padding: 12px 14px !important;
+  color: var(--text-2) !important;
+  font-size: 13.5px !important;
+}
+
+table tbody tr { transition: background 150ms ease; }
+table tbody tr:hover td { background: #fbfcfc !important; }
+
+table td .name, .row .name, .hot-dish, .dish-name {
+  color: var(--text) !important;
+  font-weight: 600 !important;
+}
+
+/* --- Плашки статусов ------------------------------------------------------ */
+/* Светлая заливка, тонкая рамка, цветной текст — как в референсе */
+
+.chip, .badge-ok, .badge-stop, .stop-chip, .mode, .pill {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px !important;
+  border-radius: 999px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.chip-receipt, .badge-ok, .pill-promo {
+  background: var(--ok-bg) !important; color: var(--ok) !important;
+  border-color: var(--ok-bd) !important;
+}
+.chip-order {
+  background: var(--info-bg) !important; color: var(--info) !important;
+  border-color: #c9d6fb !important;
+}
+.pill-mid {
+  background: var(--warn-bg) !important; color: var(--warn) !important;
+  border-color: var(--warn-bd) !important;
+}
+.chip-writeoff, .badge-stop, .stop-chip, .chip-expiry, .pill-high {
+  background: var(--danger-bg) !important; color: var(--danger) !important;
+  border-color: var(--danger-bd) !important;
+}
+.mode {
+  background: var(--neutral-bg) !important; color: var(--text-2) !important;
+  border-color: var(--neutral-bd) !important;
+}
+.mode-ready {
+  background: var(--info-bg) !important; color: var(--info) !important;
+  border-color: #c9d6fb !important;
+}
+
+/* Цветная точка перед плашкой — статус читается взглядом */
+.chip::before, .badge-ok::before, .badge-stop::before,
+.stop-chip::before, .mode::before, .pill::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 6px;
+}
+
+.status-ready { color: var(--ok) !important; }
+.status-new { color: var(--muted) !important; }
+
+.qty, .right { font-variant-numeric: tabular-nums; }
+
+/* --- Кнопки и поля -------------------------------------------------------- */
+
+.btn, .btn-add, .btn-archive, .btn-ghost, .btn-refresh,
+.btn-write, .btn-cancel, .hot-act, .logout {
+  border-radius: var(--radius-sm) !important;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.hot-act {
+  background: var(--accent) !important;
+  border-radius: var(--radius-sm) !important;
+}
+.hot-act:hover { background: var(--accent-hover) !important; }
+.hot-act.ghost {
+  background: var(--card) !important;
+  color: var(--accent) !important;
+  border: 1px solid var(--ok-bd) !important;
+}
+
+.field label, .filter label { color: var(--muted) !important; font-size: 12px !important; }
+
+input, select {
+  border-color: var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text) !important;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+input:focus, select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12) !important;
+}
+
+/* --- Адаптив -------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .body { flex-direction: column !important; }
+
+  .sidebar {
+    width: 100% !important;
+    flex-direction: row !important;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px !important;
+    scrollbar-width: none;
+  }
+  .sidebar::-webkit-scrollbar { display: none; }
+
+  .nav-item { white-space: nowrap; margin-bottom: 0; }
+
+  .sidebar-user {
+    margin-top: 0;
+    margin-left: auto;
+    border-top: none;
+    border-left: 1px solid var(--border);
+    padding: 10px 12px;
+  }
+
+  .content { padding: 20px 18px !important; }
+}
+
+@media (max-width: 640px) {
+  .topbar { height: auto !important; padding: 12px 16px !important; }
+  .content { padding: 16px 12px !important; }
+
+  .kpis, .kpi-row, .grid3, .cols, .filters { grid-template-columns: 1fr !important; }
+
+  .card, .panel { overflow-x: auto; }
+  table { min-width: 520px; }
+
+  .btn, .btn-add, .btn-archive, .btn-refresh, .btn-write,
+  .btn-cancel, .hot-act { min-height: 38px; }
+
+  input, select { height: 40px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

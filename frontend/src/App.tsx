@@ -47,7 +47,7 @@ function App() {
 
   // Какой раздел рисуем в рабочей области
   const renderSection = () => {
-    if (section === "Дашборд") return <DashboardPage />;
+    if (section === "Главная") return <DashboardPage />;
     if (section === "Продукты") return <ProductsPage />;
     if (section === "Блюда") return <DishesPage />;
     if (section === "Склад") return <StockPage />;
