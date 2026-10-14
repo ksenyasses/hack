@@ -36,10 +36,21 @@ public static class AvailabilityService
             var product = await db.Products.FindAsync(item.ProductId);
             var unit = product?.Unit ?? "";
 
+            // Годные партии — их можно тратить
             var available = await db.ProductBatches
                 .Where(b => b.ProductId == item.ProductId
                             && b.Quantity > 0
                             && b.ExpiryDate >= today)
+                .SumAsync(b => (decimal?)b.Quantity) ?? 0;
+
+            // Просроченные лежат на складе, но в приготовление не идут.
+            // Без этого подсчёта в причине стоп-листа писалось бы «недостаточно»,
+            // хотя товар на складе есть — и управляющий поехал бы закупать
+            // вместо того, чтобы списать.
+            var expired = await db.ProductBatches
+                .Where(b => b.ProductId == item.ProductId
+                            && b.Quantity > 0
+                            && b.ExpiryDate < today)
                 .SumAsync(b => (decimal?)b.Quantity) ?? 0;
 
             var canCook = item.QuantityPerPortion <= 0
@@ -50,7 +61,7 @@ public static class AvailabilityService
             if (canCook < portions)
             {
                 portions = canCook;
-                reason = $"Недостаточно «{product?.Name}»: нужно {item.QuantityPerPortion.ToString("0.00", ci)} {unit}, доступно {available.ToString("0.00", ci)} {unit}";
+                reason = Explain(product?.Name, unit, item.QuantityPerPortion, available, expired, ci);
             }
         }
 
@@ -58,6 +69,29 @@ public static class AvailabilityService
             reason = null;
 
         return (portions == int.MaxValue ? 0 : portions, reason);
+    }
+
+    // Человеческое объяснение, почему блюдо недоступно.
+    // Разные причины требуют разных действий, поэтому пишем их по-разному:
+    // просроченное надо списать, закончившееся — заказать.
+    private static string Explain(
+        string? name, string unit, decimal perPortion, decimal available, decimal expired,
+        CultureInfo ci)
+    {
+        var label = $"«{name}»";
+
+        if (perPortion <= 0)
+            return $"У {label} не задан расход на порцию — блюдо нельзя приготовить";
+
+        if (available <= 0 && expired > 0)
+            return $"{label}: срок годности истёк — {expired.ToString("0.##", ci)} {unit} лежат просроченными, "
+                 + "блюдо вернётся в меню после списания";
+
+        if (available > 0)
+            return $"Недостаточно {label}: нужно {perPortion.ToString("0.####", ci)} {unit} на порцию, "
+                 + $"доступно {available.ToString("0.##", ci)} {unit}";
+
+        return $"{label} закончился — нет ни одной годной партии";
     }
 
     // Название продукта, который ограничивает приготовление — «узкое место».

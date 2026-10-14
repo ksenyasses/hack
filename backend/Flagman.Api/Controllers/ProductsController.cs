@@ -30,13 +30,33 @@ public class ProductsController : ControllerBase
         return Ok(items);
     }
 
+    // Проверка общих полей. Без срока хранения продукт создавать нельзя:
+    // иначе партия получает срок «сегодня» и молча протухает на следующий день.
+    private static string? Validate(ProductRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return "Название продукта не может быть пустым";
+
+        if (string.IsNullOrWhiteSpace(request.Unit))
+            return "Укажите единицу измерения";
+
+        if (request.ShelfLifeDays < 1)
+            return "Укажите срок хранения — без него партия сразу будет считаться просроченной";
+
+        if (request.MinStock < 0)
+            return "Минимальный остаток не может быть отрицательным";
+
+        return null;
+    }
+
     // POST /api/products — добавить продукт
     [HttpPost]
     [Authorize(Roles = "Manager,Cook")]
     public async Task<ActionResult> Create(ProductRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest(new { error = "Название продукта не может быть пустым" });
+        var problem = Validate(request);
+        if (problem is not null)
+            return BadRequest(new { error = problem });
 
         var exists = await _db.Products.AnyAsync(p => p.Name == request.Name && !p.IsArchived);
         if (exists)
@@ -64,6 +84,10 @@ public class ProductsController : ControllerBase
         var product = await _db.Products.FindAsync(id);
         if (product is null)
             return NotFound(new { error = "Продукт не найден" });
+
+        var problem = Validate(request);
+        if (problem is not null)
+            return BadRequest(new { error = problem });
 
         product.Name = request.Name.Trim();
         product.Unit = request.Unit;

@@ -56,8 +56,18 @@ public class DeliveriesController : ControllerBase
             if (product is null || product.IsArchived)
                 return BadRequest(new { error = $"Продукт с id {item.ProductId} не найден" });
 
-            // Если срок указан вручную — берём его. Если нет — считаем: сегодня + срок хранения продукта
-            var expiry = item.ExpiryDate ?? today.AddDays(product.ShelfLifeDays);
+            // Срок годности обязателен и берётся только из поставки.
+            // Раньше при пустом поле он считался как «сегодня + срок хранения
+            // продукта» — это догадка по справочнику, а не факт: на упаковке
+            // может лежать товар, который скоро истечёт, и он молча уезжал
+            // дальше с чужим сроком.
+            if (item.ExpiryDate is null)
+                return BadRequest(new
+                {
+                    error = $"Укажите срок годности для «{product.Name}» — он написан на упаковке"
+                });
+
+            var expiry = item.ExpiryDate.Value;
 
             if (expiry < today)
                 return BadRequest(new { error = $"У продукта «{product.Name}» указан уже прошедший срок годности" });
