@@ -203,7 +203,7 @@ namespace Flagman.Api.Migrations
                         .HasColumnType("integer");
 
                     b.Property<decimal>("QuantityPerPortion")
-                        .HasColumnType("numeric(12,3)");
+                        .HasColumnType("numeric(12,6)");
 
                     b.HasKey("Id");
 

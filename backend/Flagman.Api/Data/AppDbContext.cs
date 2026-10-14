@@ -20,11 +20,16 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Все количества — numeric(12,3), точность до грамма
+        // Минимальный остаток, остатки партий и движения — до грамма
         modelBuilder.Entity<Product>().Property(p => p.MinStock).HasColumnType("numeric(12,3)");
         modelBuilder.Entity<ProductBatch>().Property(b => b.Quantity).HasColumnType("numeric(12,3)");
-        modelBuilder.Entity<RecipeItem>().Property(r => r.QuantityPerPortion).HasColumnType("numeric(12,3)");
         modelBuilder.Entity<StockMovement>().Property(m => m.QuantityDelta).HasColumnType("numeric(12,3)");
         modelBuilder.Entity<WriteOffRequest>().Property(r => r.Quantity).HasColumnType("numeric(12,3)");
+
+        // Расход на порцию — до десятитысячной доли килограмма.
+        // При numeric(12,3) ванилин (0,0002 кг) и перец (0,0003 кг) округлялись
+        // до нуля, и блюдо навсегда уходило в стоп-лист с причиной
+        // «нужно 0,00 кг, доступно 1,00 кг».
+        modelBuilder.Entity<RecipeItem>().Property(r => r.QuantityPerPortion).HasColumnType("numeric(12,6)");
     }
 }
