@@ -49,6 +49,14 @@ public enum OrderItemStatus
     Ready
 }
 
+// Состояние заявки на списание: повар попросил, управляющий решает
+public enum WriteOffRequestStatus
+{
+    Pending,      // ждёт подтверждения
+    Approved,     // подтверждена, товар списан
+    Rejected      // отклонена
+}
+
 // Сотрудник. Пароль храним только зашифрованным
 public class User
 {
@@ -147,5 +155,22 @@ public class StockMovement
     public WriteOffReason? Reason { get; set; }
     public int? OrderId { get; set; }             // к какому заказу относится
     public int UserId { get; set; }
+    public string? Comment { get; set; }          // текст причины при списании, особенно для «Другое»
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Заявка на списание. Повар создаёт, управляющий подтверждает или отклоняет.
+// До подтверждения склад не трогаем — это главное отличие от прямого списания.
+public class WriteOffRequest
+{
+    public int Id { get; set; }
+    public int ProductId { get; set; }
+    public decimal Quantity { get; set; }
+    public WriteOffReason Reason { get; set; }
+    public string? Comment { get; set; }                   // обязателен, если Reason = Other
+    public WriteOffRequestStatus Status { get; set; } = WriteOffRequestStatus.Pending;
+    public int CreatedByUserId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public int? DecidedByUserId { get; set; }
+    public DateTime? DecidedAt { get; set; }
 }

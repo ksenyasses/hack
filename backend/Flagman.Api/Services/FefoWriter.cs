@@ -24,25 +24,27 @@ public static class FefoWriter
             .OrderBy(b => b.ExpiryDate).ThenBy(b => b.Id)
             .ToListAsync();
 
-        await Consume(db, batches, needed, productId, orderId, MovementType.Order, null, userId);
+        await Consume(db, batches, needed, productId, orderId, MovementType.Order, null, userId, null);
     }
 
-    // Ручное списание: включая просрочку — она уходит первой
+    // Ручное списание: включая просрочку — она уходит первой.
+    // comment — необязательный текст причины (для «Другое»).
     public static async Task WriteOffManual(
-        AppDbContext db, int productId, decimal needed, WriteOffReason reason, int userId)
+        AppDbContext db, int productId, decimal needed, WriteOffReason reason, int userId,
+        string? comment = null)
     {
         var batches = await db.ProductBatches
             .Where(b => b.ProductId == productId && b.Quantity > 0)
             .OrderBy(b => b.ExpiryDate).ThenBy(b => b.Id)
             .ToListAsync();
 
-        await Consume(db, batches, needed, productId, null, MovementType.WriteOff, reason, userId);
+        await Consume(db, batches, needed, productId, null, MovementType.WriteOff, reason, userId, comment);
     }
 
     // Общая часть: идём по партиям по порядку и уменьшаем остатки
     private static async Task Consume(
         AppDbContext db, List<ProductBatch> batches, decimal needed, int productId,
-        int? orderId, MovementType type, WriteOffReason? reason, int userId)
+        int? orderId, MovementType type, WriteOffReason? reason, int userId, string? comment)
     {
         var ci = CultureInfo.GetCultureInfo("ru-RU");
         var total = batches.Sum(b => b.Quantity);
@@ -73,6 +75,7 @@ public static class FefoWriter
                 Reason = reason,
                 OrderId = orderId,
                 UserId = userId,
+                Comment = comment,
                 CreatedAt = DateTime.UtcNow
             });
         }

@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+    public DbSet<WriteOffRequest> WriteOffRequests => Set<WriteOffRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,5 +25,6 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ProductBatch>().Property(b => b.Quantity).HasColumnType("numeric(12,3)");
         modelBuilder.Entity<RecipeItem>().Property(r => r.QuantityPerPortion).HasColumnType("numeric(12,3)");
         modelBuilder.Entity<StockMovement>().Property(m => m.QuantityDelta).HasColumnType("numeric(12,3)");
+        modelBuilder.Entity<WriteOffRequest>().Property(r => r.Quantity).HasColumnType("numeric(12,3)");
     }
 }

@@ -29,7 +29,7 @@ public class MovementsController : ControllerBase
 
         var query = _db.StockMovements.AsQueryable();
 
-        // Фильтр по типу операции: Receipt, Order, WriteOff
+        // Фильтр по типу операции: Receipt, Order, WriteOff, Return
         if (!string.IsNullOrWhiteSpace(type) && Enum.TryParse<MovementType>(type, true, out var parsedType))
             query = query.Where(m => m.Type == parsedType);
 
@@ -74,6 +74,7 @@ public class MovementsController : ControllerBase
                 m.QuantityDelta,
                 m.Type,
                 m.Reason,
+                m.Comment,
                 m.OrderId
             })
             .ToListAsync();
@@ -90,6 +91,7 @@ public class MovementsController : ControllerBase
             m.QuantityDelta,
             type = m.Type.ToString(),
             reason = m.Reason?.ToString(),
+            m.Comment,
             m.OrderId
         });
 
