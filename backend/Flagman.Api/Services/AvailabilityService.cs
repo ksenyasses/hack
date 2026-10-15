@@ -10,7 +10,7 @@ public static class AvailabilityService
     // Просроченные партии не считаются, пустые — тоже.
     public static async Task<(int Portions, string? Reason)> Check(AppDbContext db, int dishId)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
         var dish = await db.Dishes.FindAsync(dishId);
         if (dish is null)
             return (0, "Блюдо не найдено");
@@ -98,7 +98,7 @@ public static class AvailabilityService
     // Нужен для прогноза: «хватит на 5 дней, ограничивает курица»
     public static async Task<string?> LimitingProduct(AppDbContext db, int dishId)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
 
         var recipe = await db.RecipeItems
             .Where(r => r.DishId == dishId)

@@ -13,6 +13,7 @@ import WriteOffPage from "./WriteOffPage";
 import WriteOffReviewPage from "./WriteOffReviewPage";
 import HotOffersPage from "./HotOffersPage";
 import JournalPage from "./JournalPage";
+import ArchivePage from "./ArchivePage";
 import MyOrdersPage from "./MyOrdersPage";
 import KitchenPage from "./KitchenPage";
 import ForecastPage from "./ForecastPage";
@@ -57,6 +58,7 @@ function App() {
     if (section === "Стоп-лист") return <StopListPage />;
     if (section === "Горячие предложения") return <HotOffersPage />;
     if (section === "Журнал") return <JournalPage />;
+    if (section === "Архив заказов") return <ArchivePage />;
     if (section === "Прогноз") return <ForecastPage />;
     if (section === "Кухня") return <KitchenPage />;
     if (section === "Новый заказ") return <NewOrderPage />;

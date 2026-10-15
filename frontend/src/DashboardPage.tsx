@@ -109,6 +109,8 @@ export default function DashboardPage() {
   const [offers, setOffers] = useState<HotOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // id блюда, по которому прямо сейчас жмём кнопку — чтобы показать «Сохраняем…»
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   // Грузим дашборд и предложения одним махом
   useEffect(() => {
@@ -130,6 +132,7 @@ export default function DashboardPage() {
   const togglePromo = async (offer: HotOffer) => {
     const today = new Date().toISOString().slice(0, 10); // "ГГГГ-ММ-ДД"
     const next = !offer.isPromo;
+    setBusyId(offer.id);
     try {
       await setDishPromo(offer.id, next ? today : null);
       // Статус сохранился — обновляем только эту строку
@@ -140,6 +143,8 @@ export default function DashboardPage() {
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } }; message?: string };
       setError(e.response?.data?.error ?? e.message ?? "Не удалось изменить акцию");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -200,13 +205,13 @@ export default function DashboardPage() {
                     <span className={offer.priority >= 15 ? "pill pill-high" : "pill pill-mid"}>
                       {offer.priority >= 15 ? "Высокий" : "Средний"}
                     </span>
-                    {index === 0 ? (
-                      <button className="hot-act" onClick={() => togglePromo(offer)}>
-                        В акцию
-                      </button>
-                    ) : (
-                      <button className="hot-act ghost">Предложить</button>
-                    )}
+                    <button
+                      className="hot-act"
+                      onClick={() => togglePromo(offer)}
+                      disabled={busyId === offer.id}
+                    >
+                      {busyId === offer.id ? "Сохраняем…" : "В акцию"}
+                    </button>
                   </>
                 )}
               </div>

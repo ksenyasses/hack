@@ -32,7 +32,7 @@ public class HotOffersController : ControllerBase
     [HttpGet("api/hot-offers")]
     public async Task<ActionResult> Get()
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
         var limit = today.AddDays(StockHelper.ExpiringSoonDays);
 
         // 1. Горящие партии: есть остаток, срок уже близко или прошёл

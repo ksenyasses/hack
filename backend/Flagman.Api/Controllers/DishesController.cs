@@ -25,7 +25,7 @@ public class DishesController : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetAll()
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
         var dishes = await _db.Dishes.OrderBy(d => d.Name).ToListAsync();
         var result = new List<object>();
 

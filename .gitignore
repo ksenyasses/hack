@@ -13,3 +13,7 @@ dist/
 
 # Env
 .env
+
+# Материалы презентации: скриншоты и собранный слайд
+presentation/
+flagman.sql

@@ -33,7 +33,7 @@ public class DeliveriesController : ControllerBase
         if (await _db.Deliveries.AnyAsync(d => d.Number == request.Number))
             return BadRequest(new { error = "Поставка с таким номером уже есть" });
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
         var userId = GetUserId();
 
         var delivery = new Delivery

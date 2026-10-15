@@ -18,7 +18,7 @@ public class DashboardController : ControllerBase
     [HttpGet("api/dashboard")]
     public async Task<ActionResult> Get()
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
         var soonLimit = today.AddDays(StockHelper.ExpiringSoonDays);
 
         // Остатки по продуктам: сколько всего и какой ближайший срок

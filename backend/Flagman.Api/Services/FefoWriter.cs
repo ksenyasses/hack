@@ -17,7 +17,7 @@ public static class FefoWriter
     public static async Task WriteOffForOrder(
         AppDbContext db, int productId, decimal needed, int orderId, int userId)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
 
         var batches = await db.ProductBatches
             .Where(b => b.ProductId == productId && b.Quantity > 0 && b.ExpiryDate >= today)

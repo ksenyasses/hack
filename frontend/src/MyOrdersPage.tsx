@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getOrdersFull, cancelOrder, confirmAction } from "./api";
+import { getOrdersFull, cancelOrder, confirmAction, serveOrder } from "./api";
 import type { OrderFull } from "./api";
 
 // Стили — карточки заказов в палитре остальных страниц
@@ -28,6 +28,13 @@ const css = `
               font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .btn-cancel:hover:not(:disabled) { background: #fdeaea; }
 .btn-cancel:disabled { opacity: 0.5; cursor: default; }
+/* «Выдан» — заказ ушёл гостю. Зелёный: это единственное действие,
+   которое закрывает заказ окончательно */
+.btn-serve { margin-top: 12px; background: #2f9e63; color: #fff; border: none;
+             border-radius: 6px; padding: 10px 20px;
+             font-size: 14px; font-weight: 700; cursor: pointer; }
+.btn-serve:hover:not(:disabled) { background: #278754; }
+.btn-serve:disabled { opacity: 0.6; cursor: default; }
 .loading { color: #7b8794; font-size: 16px; }
 .error { color: #d0342c; font-size: 14px; margin: 0 0 16px; }
 `;
@@ -54,14 +61,16 @@ export default function MyOrdersPage() {
   const [orders, setOrders] = useState<OrderFull[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Заказ, который сейчас отмечаем выданным
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   const load = async () => {
     try {
       const data = await getOrdersFull();
-      // Отменённые не показываем, свежие сверху — по убыванию id
+      // Показываем только рабочие заказы, свежие сверху
       setOrders(
         data
-          .filter((o) => o.status !== "Cancelled")
+          .filter((o) => o.status === "New")
           .sort((a, b) => b.id - a.id)
       );
       setError("");
@@ -99,6 +108,21 @@ export default function MyOrdersPage() {
     }
   };
 
+  // Выдать гостю: заказ получает статус «выдан» и уходит из списка
+  const handleServe = async (id: number) => {
+    setError("");
+    setBusyId(id);
+    try {
+      await serveOrder(id);
+      await load();
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(e.response?.data?.error ?? e.message ?? "Не удалось отметить заказ выданным");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div>
       <style>{css}</style>
@@ -115,6 +139,8 @@ export default function MyOrdersPage() {
       {orders.map((order) => {
         // Отменять можно, пока ни одно блюдо не отмечено готовым
         const canCancel = order.items.every((item) => item.status !== "Ready");
+        // Выдать можно, наоборот, когда готовы все
+        const canServe = order.items.length > 0 && order.items.every((item) => item.status === "Ready");
         return (
         <div className="card" key={order.id}>
           <div className="order-head">
@@ -141,13 +167,17 @@ export default function MyOrdersPage() {
             </div>
           ))}
 
-          <button
-            className="btn-cancel"
-            disabled={!canCancel}
-            onClick={() => handleCancel(order.id)}
-          >
-            {canCancel ? "Отменить заказ" : "Уже начали готовить"}
-          </button>
+          {/* Выдать гостю. Кнопка появляется, когда все блюда готовы.
+              После нажатия заказ пропадает отсюда и уходит в архив. */}
+          {canServe && (
+            <button
+              className="btn-serve"
+              disabled={busyId === order.id}
+              onClick={() => handleServe(order.id)}
+            >
+              {busyId === order.id ? "Выдаём…" : "Выдан"}
+            </button>
+          )}
         </div>
         );
       })}

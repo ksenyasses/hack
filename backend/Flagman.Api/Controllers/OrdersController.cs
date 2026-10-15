@@ -31,7 +31,7 @@ public class OrdersController : ControllerBase
         if (request.Items is null || request.Items.Count == 0)
             return BadRequest(new { error = "Заказ пустой" });
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
         var userId = GetUserId();
         var ci = CultureInfo.GetCultureInfo("ru-RU");
         var orderItems = new List<OrderItem>();
@@ -136,7 +136,13 @@ public class OrdersController : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetAll()
     {
-        var orders = await _db.Orders.OrderByDescending(o => o.Id).ToListAsync();
+        // Рабочий список: только новые заказы. Выданные уходят в архив,
+        // отменённые — в пустоту. Поэтому ни на кухне, ни у официанта
+        // отработанного заказа не видно.
+        var orders = await _db.Orders
+            .Where(o => o.Status == OrderStatus.New)
+            .OrderByDescending(o => o.Id)
+            .ToListAsync();
         var result = new List<object>();
 
         foreach (var order in orders)
@@ -244,14 +250,138 @@ public class OrdersController : ControllerBase
             return NotFound(new { error = "Блюдо в этом заказе не найдено" });
 
         item.Status = OrderItemStatus.Ready;
+        // Запоминаем, кто именно приготовил — это попадёт в архив заказов
+        item.ReadyByUserId = GetUserId();
         await _db.SaveChangesAsync();
 
         return Ok(new { item.Id, item.DishId, status = item.Status.ToString() });
     }
 
-    // POST /api/orders/{id}/cancel — отмена заказа с возвратом товара на склад
-    [HttpPost("{id}/cancel")]
+    // POST /api/orders/{id}/served — официант выдал гостю.
+    // Заказ уходит из рабочего списка и появляется в архиве.
+    [HttpPost("{id}/served")]
     [Authorize(Roles = "Waiter,Manager")]
+    public async Task<ActionResult> MarkServed(int id)
+    {
+        var order = await _db.Orders.FindAsync(id);
+        if (order is null)
+            return NotFound(new { error = "Заказ не найден" });
+        if (order.Status == OrderStatus.Cancelled)
+            return BadRequest(new { error = "Заказ отменён" });
+        if (order.Status == OrderStatus.Served)
+            return BadRequest(new { error = "Заказ уже выдан" });
+
+        var items = await _db.OrderItems.Where(i => i.OrderId == id).ToListAsync();
+        if (items.Any(i => i.Status != OrderItemStatus.Ready))
+            return BadRequest(new { error = "Не все блюда готовы — выдать пока нечего" });
+
+        order.Status = OrderStatus.Served;
+        order.ServedAt = DateTime.UtcNow;
+        order.ServedByUserId = GetUserId();
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            order.Id,
+            status = order.Status.ToString(),
+            servedAt = order.ServedAt,
+            servedBy = GetUserId()
+        });
+    }
+
+    // GET /api/orders/archive — архив выданных заказов.
+    // Фильтры такие же, как в журнале: период, стол, сотрудник.
+    [HttpGet("archive")]
+    [Authorize(Roles = "Manager")]
+    public async Task<ActionResult> Archive(
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] string? table = null,
+        [FromQuery] string? user = null)
+    {
+        var query = _db.Orders.Where(o => o.Status == OrderStatus.Served);
+
+        // Даты фильтра считаем местным временем сервера и переводим в UTC
+        if (from.HasValue)
+        {
+            var fromDate = DateTime.SpecifyKind(
+                from.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local).ToUniversalTime();
+            query = query.Where(o => o.ServedAt >= fromDate);
+        }
+
+        if (to.HasValue)
+        {
+            var toDate = DateTime.SpecifyKind(
+                to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Local).ToUniversalTime();
+            query = query.Where(o => o.ServedAt < toDate);
+        }
+
+        // По столу — подстрока, чтобы находило «5» по «стол 5» и «5, VIP-2»
+        if (!string.IsNullOrWhiteSpace(table))
+        {
+            var t = table.Trim().ToLower();
+            query = query.Where(o => o.TableNumber != null && o.TableNumber.ToLower().Contains(t));
+        }
+
+        var rows = await query.OrderByDescending(o => o.ServedAt).ToListAsync();
+
+        // Логины сотрудников: показываем именно логин (cook, waiter),
+        // как и просили, а не полное имя из справочника
+        var users = await _db.Users
+            .Select(u => new { u.Id, u.Login, u.FullName, u.Role })
+            .ToDictionaryAsync(u => u.Id);
+
+        var itemRows = await _db.OrderItems
+            .Where(i => rows.Select(o => o.Id).Contains(i.OrderId))
+            .Select(i => new { i.OrderId, i.DishId, i.Quantity, i.Status, i.ReadyByUserId })
+            .ToListAsync();
+
+        var dishNames = await _db.Dishes
+            .Select(d => new { d.Id, d.Name })
+            .ToDictionaryAsync(d => d.Id);
+
+        var ci = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
+        var nameOf = (int? id) => id.HasValue && users.TryGetValue(id.Value, out var u) ? u.Login : null;
+
+        var result = rows.Select(o =>
+        {
+            var mine = itemRows.Where(i => i.OrderId == o.Id).ToList();
+
+            return new
+            {
+                id = o.Id,
+                servedAt = o.ServedAt,
+                date = o.ServedAt?.ToString("yyyy-MM-dd"),
+                time = o.ServedAt?.ToString("HH:mm", ci),
+                tableNumber = o.TableNumber,
+                isTakeaway = o.TableNumber == null,
+                // Состав одной строкой: «Крем-суп ×2, Борщ ×1»
+                dishes = string.Join(", ", mine
+                    .GroupBy(i => i.DishId)
+                    .Select(g => $"{dishNames.GetValueOrDefault(g.Key)?.Name ?? "блюдо"} ×{g.Sum(x => x.Quantity)}")),
+                dishCount = mine.Sum(i => i.Quantity),
+                // Повар — тот, кто отметил блюда готовыми
+                cook = nameOf(mine.FirstOrDefault(i => i.ReadyByUserId.HasValue)?.ReadyByUserId),
+                waiter = nameOf(o.ServedByUserId)
+            };
+        });
+
+        // Фильтр по сотруднику — уже после выборки, сравниваем логины
+        var list = result.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(user))
+        {
+            var u = user.Trim().ToLower();
+            list = list.Where(x => x.cook?.ToLower() == u || x.waiter?.ToLower() == u);
+        }
+
+        return Ok(list.ToList());
+    }
+
+    // POST /api/orders/{id}/cancel — отмена заказа с возвратом товара на склад.
+    // Повару тоже можно: гость не пришёл, заказ снимаем с кухни и возвращаем
+    // продукты на склад по тем же партиям, откуда они ушли.
+    [HttpPost("{id}/cancel")]
+    [Authorize(Roles = "Waiter,Cook,Manager")]
     public async Task<ActionResult> Cancel(int id)
     {
         var order = await _db.Orders.FindAsync(id);

@@ -91,6 +91,12 @@ namespace Flagman.Api.Migrations
                     b.Property<int>("ServeMode")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("ServedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ServedByUserId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -117,6 +123,9 @@ namespace Flagman.Api.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ReadyByUserId")
                         .HasColumnType("integer");
 
                     b.Property<int>("Status")

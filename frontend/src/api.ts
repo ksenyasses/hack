@@ -1224,6 +1224,51 @@ export function confirmAction(message: string): boolean {
   return window.confirm(message);
 }
 
+// Заказ выдан гостю — POST /api/orders/{id}/served.
+// Заказ получает статус Served и уходит в архив выданных заказов.
+export async function serveOrder(id: number): Promise<void> {
+  if (USE_MOCK) {
+    mockServedIds.add(id);
+    return;
+  }
+  await api.post(`/orders/${id}/served`);
+}
+
+// Строка архива выданных заказов
+export type ArchiveOrder = {
+  id: number;
+  servedAt: string | null;
+  date: string | null;
+  time: string | null;
+  tableNumber: string | null;
+  isTakeaway: boolean;
+  dishes: string;
+  dishCount: number;
+  cook: string | null;
+  waiter: string | null;
+};
+
+// Архив выданных заказов с фильтрами: период, стол, сотрудник
+export async function getOrdersArchive(filters?: {
+  from?: string;
+  to?: string;
+  table?: string;
+  user?: string;
+}): Promise<ArchiveOrder[]> {
+  const q = new URLSearchParams();
+  if (filters?.from) q.set("from", filters.from);
+  if (filters?.to) q.set("to", filters.to);
+  if (filters?.table) q.set("table", filters.table);
+  if (filters?.user) q.set("user", filters.user);
+  const suffix = q.toString() ? "?" + q.toString() : "";
+  if (USE_MOCK) return [...mockArchive];
+  const res = await api.get<ArchiveOrder[]>(`/orders/archive${suffix}`);
+  return res.data;
+}
+
+const mockServedIds = new Set<number>();
+const mockArchive: ArchiveOrder[] = [];
+
 // Отмена заказа — POST /api/orders/{id}/cancel.
 // Товар возвращается на склад, заказ получает статус Cancelled.
 // Отменить можно, пока ни одно блюдо не отмечено готовым — это проверяет сервер.

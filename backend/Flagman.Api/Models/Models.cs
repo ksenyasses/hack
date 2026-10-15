@@ -39,7 +39,8 @@ public enum ServeMode
 public enum OrderStatus
 {
     New,
-    Cancelled
+    Cancelled,
+    Served       // блюда приготовили и выдали гостю — заказ уходит в архив
 }
 
 // Статус отдельного блюда в заказе — повар отмечает каждое своё
@@ -132,6 +133,12 @@ public class Order
     public string? TableNumber { get; set; }
     public ServeMode ServeMode { get; set; } = ServeMode.AllAtOnce;
     public OrderStatus Status { get; set; } = OrderStatus.New;
+
+    // Кто приготовил и кто выдал — для архива заказов.
+    // Заполняются, когда повар отмечает блюдо готовым и когда
+    // официант нажимает «Выдан».
+    public DateTime? ServedAt { get; set; }
+    public int? ServedByUserId { get; set; }
 }
 
 // Строка заказа: какое блюдо и сколько порций
@@ -142,6 +149,9 @@ public class OrderItem
     public int DishId { get; set; }
     public int Quantity { get; set; }             // порции
     public OrderItemStatus Status { get; set; } = OrderItemStatus.New;
+
+    // Повар, который отметил это блюдо готовым
+    public int? ReadyByUserId { get; set; }
 }
 
 // Журнал: каждое изменение количества товара

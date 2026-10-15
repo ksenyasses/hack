@@ -21,8 +21,14 @@ const css = `
 .panel-title { margin: 0 0 16px; font-size: 15px; font-weight: 700; color: #7c8896; }
 .dish-card { border: 1px solid #eef0f3; border-radius: 8px; padding: 16px;
              margin-bottom: 12px; }
+/* «Блюдо дня» подсвечиваем рамкой — официант видит главное блюдо сразу */
+.dish-card.dish-promo { border-color: #f3d3bd; background: #fffdfb; }
 .dish-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.dish-name { margin: 0; font-size: 17px; font-weight: 700; color: #344054; }
+.dish-name { margin: 0; font-size: 17px; font-weight: 700; color: #344054;
+             display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Оранжевая метка — тот же вид, что в разделе «Меню» */
+.badge-promo { display: inline-block; padding: 3px 10px; border-radius: 999px;
+               font-size: 12px; font-weight: 700; color: #fff; background: #e4692a; }
 .dish-recipe { margin: 6px 0 8px; font-size: 13px; color: #9aa4af; }
 .badge-ok { color: #2f9e63; font-size: 14px; }
 .badge-stop { color: #d0342c; font-size: 14px; }
@@ -125,11 +131,16 @@ export default function NewOrderPage() {
   // Поиск по блюдам: сначала по первой букве, дальше по любому фрагменту.
   // Пробел в запросе означает «и ещё», поэтому «цы кар» найдёт «Цезарь с курицей».
   const q = query.trim().toLowerCase();
-  const shownDishes = q
+  // Сначала «Блюдо дня» — его и предлагаем стимулировать, официант должен
+  // видеть его первым. При поиске порядок не меняем, чтобы не путать.
+  const matched = q
     ? dishes.filter((d) =>
         [d.name, d.reason ?? ""].join(" ").toLowerCase().split(q).length > 1
       )
     : dishes;
+  const shownDishes = q
+    ? matched
+    : [...matched].sort((a, b) => Number(b.isPromo) - Number(a.isPromo));
 
   const maxOf = (dishId: number) =>
     dishes.find((d) => d.id === dishId)?.availablePortions ?? 0;
@@ -308,9 +319,15 @@ export default function NewOrderPage() {
             <p className="empty">Ничего не найдено</p>
           ) : (
             shownDishes.map((dish) => (
-              <div className="dish-card" key={dish.id}>
+              <div
+                className={"dish-card" + (dish.isPromo ? " dish-promo" : "")}
+                key={dish.id}
+              >
                 <div className="dish-head">
-                  <h3 className="dish-name">{dish.name}</h3>
+                  <h3 className="dish-name">
+                    {dish.name}
+                    {dish.isPromo && <span className="badge badge-promo">Блюдо дня</span>}
+                  </h3>
                   <button
                     className="btn-add"
                     disabled={dish.inStopList || dish.availablePortions === 0}

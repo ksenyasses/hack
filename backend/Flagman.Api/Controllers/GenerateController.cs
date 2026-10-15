@@ -26,7 +26,7 @@ public class GenerateController : ControllerBase
         [FromQuery] bool reset = false)
     {
         var userId = GetUserId();
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = StockHelper.Today();
 
         // 1. Очистка склада и заказов. Пользователи, продукты и блюда остаются
         if (reset)

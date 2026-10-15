@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getOrdersFull, getDishes, markItemReady } from "./api";
+import { getOrdersFull, getDishes, markItemReady, cancelOrder, confirmAction } from "./api";
 import type { Dish, OrderFull } from "./api";
 import { fmtQty } from "./format";
 
@@ -13,6 +13,13 @@ const css = `
 .card { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px;
         padding: 18px 20px; margin-bottom: 16px; }
 .order-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+/* Отмена заказа: гость не пришёл, снимаем с кухни и возвращаем товар */
+.order-cancel { margin-left: auto; background: #fff; color: #b42318;
+                border: 1px solid #f0c3c0; border-radius: 6px;
+                padding: 6px 12px; font-size: 13px; font-weight: 600;
+                cursor: pointer; }
+.order-cancel:hover:not(:disabled) { background: #fdeaea; }
+.order-cancel:disabled { opacity: 0.55; cursor: default; }
 .table-num { font-size: 26px; font-weight: 800; color: #1f2b38; line-height: 1; }
 /* Навынос выделяем: повар сразу видит, что это не заказ «в зал»,
    а блюдо, которое надо упаковать с собой */
@@ -91,6 +98,30 @@ export default function KitchenPage() {
   const [error, setError] = useState("");
   // Раскрытая технологическая карта: ключ "заказ-блюдо"
   const [techCard, setTechCard] = useState<string | null>(null);
+  // Заказ, который сейчас отменяем — на его кнопке показываем «Отменяем…»
+  const [busyOrder, setBusyOrder] = useState<number | null>(null);
+
+  // Отмена заказа. Товар возвращается на склад автоматически на сервере,
+  // поэтому здесь только спрашиваем подтверждение и перечитываем кухню.
+  const handleCancel = async (order: OrderFull) => {
+    if (!confirmAction(
+      `Отменить заказ №${order.id}? Продукты вернутся на склад.`
+    )) return;
+
+    setBusyOrder(order.id);
+    try {
+      await cancelOrder(order.id);
+      setTechCard(null);
+      setError("");
+      await load();
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(e.response?.data?.error ?? e.message ?? "Не удалось отменить заказ");
+      await load();
+    } finally {
+      setBusyOrder(null);
+    }
+  };
 
   // Какие заказы повар уже видел — по ним и считаем, что новые.
   // Храним в ref: это служебные данные, ререндер из-за них не нужен.
@@ -101,8 +132,12 @@ export default function KitchenPage() {
   const load = async () => {
     try {
       const [o, d] = await Promise.all([getOrdersFull(), getDishes()]);
-      // Отменённые прячем, свежие сверху — по убыванию id
-      const visible = o.filter((x) => x.status !== "Cancelled").sort((a, b) => b.id - a.id);
+      // На кухне только активные заказы: отменённые и те, где все блюда
+      // уже отмечены готовыми. Повару доска — рабочая, а не архив.
+      const visible = o
+        .filter((x) => x.status !== "Cancelled")
+        .filter((x) => x.items.length > 0 && !x.items.every((i) => i.status === "Ready"))
+        .sort((a, b) => b.id - a.id);
 
       // Первый раз показываем всё без мигания. Дальше мигают только те,
       // кого раньше на экране не было: повар краем глаза замечает новый заказ.
@@ -128,9 +163,11 @@ export default function KitchenPage() {
 
   useEffect(() => {
     load();
-    // Кухня живёт своей жизнью — обновляемся раз в 5 секунд.
+    // Кухня живёт своей жизнью — обновляемся раз в секунду.
+    // Задержка на экране заметна повару, а нагрузка при нашем масштабе
+    // (пара открытых экранов) ничтожна.
     // Интервал чистим при уходе со страницы, иначе накопятся.
-    const timer = setInterval(load, 5000);
+    const timer = setInterval(load, 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -141,18 +178,22 @@ export default function KitchenPage() {
   const markReady = async (orderId: number, dishId: number) => {
     try {
       await markItemReady(orderId, dishId);
-      // В заглушке сервер ничего не меняет — красим сами
+      // В заглушке сервер ничего не меняет — красим сами.
+      // И сразу убираем заказ, если последнее блюдо в нём теперь готово:
+      // отработанный заказ повару на доске не нужен.
       setOrders((prev) =>
-        prev.map((o) =>
-          o.id !== orderId
-            ? o
-            : {
-                ...o,
-                items: o.items.map((it) =>
-                  it.dishId === dishId ? { ...it, status: "Ready" as const } : it
-                ),
-              }
-        )
+        prev
+          .map((o) =>
+            o.id !== orderId
+              ? o
+              : {
+                  ...o,
+                  items: o.items.map((it) =>
+                    it.dishId === dishId ? { ...it, status: "Ready" as const } : it
+                  ),
+                }
+          )
+          .filter((o) => !o.items.every((it) => it.status === "Ready"))
       );
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } }; message?: string };
@@ -208,6 +249,16 @@ export default function KitchenPage() {
             <span className={order.serveMode === "AsReady" ? "mode mode-ready" : "mode"}>
               {MODE_LABELS[order.serveMode]}
             </span>
+
+            {/* Отмена заказа: гость не пришёл. Продукты вернутся на склад
+                по тем же партиям, откуда они ушли. */}
+            <button
+              className="order-cancel"
+              disabled={busyOrder === order.id}
+              onClick={() => handleCancel(order)}
+            >
+              {busyOrder === order.id ? "Отменяем…" : "Отменить заказ"}
+            </button>
           </div>
 
           {order.items.map((item, i) => {
