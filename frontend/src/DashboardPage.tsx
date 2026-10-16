@@ -188,7 +188,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {offers.map((offer, index) => (
+            {offers.map((offer) => (
               <div className="hot-row" key={offer.id}>
                 <div className="hot-dish">{offer.name}</div>
                 <div className="hot-reason">{offer.reason}</div>

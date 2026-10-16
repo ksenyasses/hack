@@ -1,3 +1,15 @@
+# Весь контур одной командой: docker compose up -d --build
+#
+# Поднимается три контейнера:
+#   db   — PostgreSQL 16, наружу не выставлена
+#   api  — ASP.NET Core API (.NET 10), собирается из Dockerfile
+#   web  — nginx: статика фронта + прокси /api на api
+#
+# Приложение: http://localhost:8080
+#
+# Миграции применяются при старте api, пользователи заводятся автоматически,
+# если база пустая. Демо-данные — отдельным шагом: node scripts/seed.mjs
+
 services:
   db:
     image: postgres:16
@@ -6,11 +18,44 @@ services:
     environment:
       POSTGRES_PASSWORD: 123
       POSTGRES_DB: flagman
-    ports:
-      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    container_name: flagman-api
+    restart: unless-stopped
+    build:
+      context: ./backend/Flagman.Api
+    environment:
+      # Хост db — внутреннее имя контейнера, наружу база не смотрит.
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=flagman;Username=postgres;Password=123"
+      Jwt__Key: "flagman-local-dev-secret-key-change-me-0123456789"
+      Jwt__Issuer: "Flagman"
+      Jwt__Audience: "FlagmanClient"
+      # Москва. Без этого сервер считал бы даты в UTC и путал
+      # «сегодня» с «завтра» в сроках годности.
+      TZ: "Europe/Moscow"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    container_name: flagman-web
+    restart: unless-stopped
+    build:
+      context: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
 
 volumes:
   pgdata:
+    # Имя тома намеренно прежнее. Переименуем — Docker создаст пустой том,
+    # и при первом запуске покажется, что все данные потеряны.
     name: pgdata

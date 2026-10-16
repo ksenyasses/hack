@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getOrdersFull, cancelOrder, confirmAction, serveOrder } from "./api";
+import { getOrdersFull, serveOrder } from "./api";
 import type { OrderFull } from "./api";
 
 // Стили — карточки заказов в палитре остальных страниц
@@ -23,11 +23,6 @@ const css = `
 .status-new { color: #7b8794; font-weight: 600; }
 .empty { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px;
          padding: 26px 20px; color: #7b8794; font-size: 14px; text-align: center; }
-.btn-cancel { background: #fff; color: #d0342c; border: 1px solid #f0c3c0;
-              border-radius: 6px; padding: 7px 14px; margin-top: 14px;
-              font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.btn-cancel:hover:not(:disabled) { background: #fdeaea; }
-.btn-cancel:disabled { opacity: 0.5; cursor: default; }
 /* «Выдан» — заказ ушёл гостю. Зелёный: это единственное действие,
    которое закрывает заказ окончательно */
 .btn-serve { margin-top: 12px; background: #2f9e63; color: #fff; border: none;
@@ -90,24 +85,6 @@ export default function MyOrdersPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Отмена заказа: товар возвращается на склад, блюда уходят из стоп-листа.
-  // Пока хоть одно блюдо готово — отменять поздно, сервер это отклонит.
-  const handleCancel = async (id: number) => {
-    setError("");
-    if (!confirmAction(
-      "Отменить заказ?\nПродукты вернутся на склад, блюда снова станут доступны."
-    )) {
-      return;
-    }
-    try {
-      await cancelOrder(id);
-      await load();
-    } catch (err) {
-      const e = err as { response?: { data?: { error?: string } }; message?: string };
-      setError(e.response?.data?.error ?? e.message ?? "Не удалось отменить заказ");
-    }
-  };
-
   // Выдать гостю: заказ получает статус «выдан» и уходит из списка
   const handleServe = async (id: number) => {
     setError("");
@@ -137,9 +114,7 @@ export default function MyOrdersPage() {
       )}
 
       {orders.map((order) => {
-        // Отменять можно, пока ни одно блюдо не отмечено готовым
-        const canCancel = order.items.every((item) => item.status !== "Ready");
-        // Выдать можно, наоборот, когда готовы все
+        // Выдать можно, когда готовы все позиции заказа
         const canServe = order.items.length > 0 && order.items.every((item) => item.status === "Ready");
         return (
         <div className="card" key={order.id}>
