@@ -52,6 +52,12 @@
   background: var(--card) !important;
   border-bottom: 1px solid var(--border);
   height: 60px !important;
+  /* На телефоне браузер рисует свою панель адреса и статус-бар.
+     safe-area-inset отодвигает контент от выреза и «чёлки»,
+     иначе заголовок и кнопка «Выйти» оказываются под ними. */
+  padding-top: env(safe-area-inset-top) !important;
+  padding-left: env(safe-area-inset-left) !important;
+  padding-right: env(safe-area-inset-right) !important;
 }
 
 .brand {
@@ -410,18 +416,45 @@ input:focus, select:focus {
 }
 
 @media (max-width: 640px) {
-  .topbar { height: auto !important; padding: 12px 16px !important; }
+  /* Отступы безопасности iPhone: без них верхняя панель и низ экрана
+     заезжают под вырез и «домашнюю полоску». */
+  .topbar {
+    height: auto !important;
+    padding: 12px 16px !important;
+    padding-top: calc(12px + env(safe-area-inset-top)) !important;
+    padding-left: calc(16px + env(safe-area-inset-left)) !important;
+    padding-right: calc(16px + env(safe-area-inset-right)) !important;
+  }
   .content { padding: 16px 12px !important; }
 
-  .kpis, .kpi-row, .grid3, .cols, .filters { grid-template-columns: 1fr !important; }
+  /* .columns — сетка страницы «Новый заказ», .cols — «Списание».
+     Обе без этого остаются в две колонки, и на телефоне всё
+     сжимается в нечитаемую кашу. .form-grid не нужен: там auto-fit,
+     он схлопывается сам. */
+  .kpis, .kpi-row, .grid3, .cols, .columns, .filters {
+    grid-template-columns: 1fr !important;
+  }
 
+  /* Таблицы на телефоне. Раньше стояло table { min-width: 520px }, и любая
+     таблица шириной с экран растягивала всю страницу — появлялась
+     горизонтальная прокрутка и всё «уезжало» вбок.
+     Теперь таблица сама становится прокручиваемым блоком: по ширине
+     экрана, а лишнее прокручивается внутри неё. */
+  table { min-width: 0; }
+  .table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .card, .panel { overflow-x: auto; }
-  table { min-width: 520px; }
 
   .btn, .btn-add, .btn-archive, .btn-refresh, .btn-write,
   .btn-cancel, .hot-act { min-height: 38px; }
 
   input, select { height: 40px !important; }
+
+  /* Нижний край: карточки не должны упираться в «домашнюю полоску» */
+  .content { padding-bottom: calc(16px + env(safe-area-inset-bottom)) !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
