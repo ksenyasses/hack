@@ -14,8 +14,15 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Разрешаем фронту обращаться к серверу
 builder.Services.AddCors(options =>
 {
+    // Домен фронта задаётся переменной окружения Cors:Origins через запятую.
+    // Локальные адреса разрешены всегда, чтобы демо работало без настройки.
+    var origins = new List<string> { "http://localhost:5173", "http://127.0.0.1:5173" };
+
+    if (builder.Configuration["Cors:Origins"] is { Length: > 0 } extra)
+        origins.AddRange(extra.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()));
+
     options.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+        policy.WithOrigins(origins.ToArray())
               .AllowAnyHeader()
               .AllowAnyMethod());
 });
